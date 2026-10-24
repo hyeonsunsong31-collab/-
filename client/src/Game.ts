@@ -28,6 +28,27 @@ export class Game {
     this.camera.position.set(0, 30, 60);
   }
 
+  /** Minimal scene (sky + sun + flat ground) for the pose gallery and tests. */
+  async bootLite(): Promise<void> {
+    const q = QUALITY[this.qualityLevel];
+    this.lighting = new Lighting(this.scene, this.camera, q);
+    const sun = SkySystem.createSun(this.lighting.sunDir);
+    this.renderer = new Renderer(this.canvas, this.scene, this.camera, q, sun);
+    this.sky = new SkySystem(this.scene, this.renderer.gl, this.lighting.sunDir, sun);
+    this.scene.environment = this.sky.envMap;
+    this.scene.environmentIntensity = 1.0;
+    const ground = new THREE.Mesh(
+      new THREE.CircleGeometry(400, 64).rotateX(-Math.PI / 2),
+      this.lighting.register(new THREE.MeshStandardMaterial({ color: '#4f7a2a', roughness: 0.95 }), undefined, 'gallery-ground'),
+    );
+    ground.receiveShadow = true;
+    this.scene.add(ground);
+    this.lite = true;
+    this.ready = true;
+  }
+
+  lite = false;
+
   async boot(progress: BootProgress): Promise<void> {
     const q = QUALITY[this.qualityLevel];
     await progress(0.05, 'Igniting the sun…');
@@ -70,7 +91,7 @@ export class Game {
     for (const fn of this.onFrame) fn(this);
     this.camera.updateMatrixWorld();
     this.sky.update(this.clock.worldDt, this.camera);
-    this.world.update(this.clock.worldDt, this.camera);
+    if (!this.lite) this.world.update(this.clock.worldDt, this.camera);
     this.lighting.update(dt);
     this.renderer.atmosphere.sync(this.camera, this.lighting.sunDir);
     this.renderer.combat.u('uT').value = this.clock.realTime;

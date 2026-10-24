@@ -25,6 +25,14 @@ async function main(): Promise<void> {
   const quality = (params.get('q') as QualityLevel | null) ?? stored ?? defaultQuality();
   const game = new Game(canvas, quality);
   (window as unknown as { __game: Game }).__game = game;
+  if (params.has('gallery')) {
+    await game.bootLite();
+    document.getElementById('boot')?.classList.add('done');
+    const { runGallery } = await import('./dev/Gallery.ts');
+    runGallery(game, params);
+    game.start();
+    return;
+  }
   await game.boot(bootProgress);
   document.getElementById('boot')?.classList.add('done');
 
