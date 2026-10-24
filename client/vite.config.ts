@@ -14,8 +14,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 4000,
     sourcemap: false,
   },
-  esbuild: {
-    jsx: 'automatic',
-    jsxImportSource: 'preact',
+  oxc: {
+    jsx: { runtime: 'automatic', importSource: 'preact' },
   },
 });
