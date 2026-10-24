@@ -78,5 +78,29 @@ vec2 akVoronoi(vec2 p) {
   }
   return vec2(sqrt(md), be);
 }
+/** Cobblestones: x = per-stone hash, yz = vector from the point to the stone centre, w = distance to the joint. */
+vec4 akCobble(vec2 p) {
+  vec2 n = floor(p);
+  vec2 f = fract(p);
+  vec2 mg, mr;
+  float md = 8.0;
+  for (int j = -1; j <= 1; j++)
+  for (int i = -1; i <= 1; i++) {
+    vec2 g = vec2(float(i), float(j));
+    vec2 o = 0.15 + 0.7 * akHash22(n + g);
+    vec2 r = g + o - f;
+    float d = dot(r, r);
+    if (d < md) { md = d; mr = r; mg = g; }
+  }
+  float be = 8.0;
+  for (int j = -1; j <= 1; j++)
+  for (int i = -1; i <= 1; i++) {
+    vec2 g = mg + vec2(float(i), float(j));
+    vec2 o = 0.15 + 0.7 * akHash22(n + g);
+    vec2 r = g + o - f;
+    if (dot(mr - r, mr - r) > 0.00001) be = min(be, dot(0.5 * (mr + r), normalize(r - mr)));
+  }
+  return vec4(akHash12(n + mg), mr, be);
+}
 #endif
 `;

@@ -10,6 +10,7 @@ import {
   stoneWallTexture,
   thatchTexture,
   roofTileTexture,
+  slateTexture,
   bannerTexture,
   clothTexture,
   rockTexture,
@@ -77,6 +78,7 @@ export class Settlements {
     const st = stoneWallTexture();
     const th = thatchTexture();
     const tl = roofTileTexture();
+    const sl = slateTexture();
     const rk = rockTexture();
     return {
       plaster: std({ map: pl.map, normalMap: pl.normalMap, roughness: 0.92 }, 'plaster'),
@@ -86,7 +88,7 @@ export class Settlements {
       rough: std({ map: rk.map, normalMap: rk.normalMap, roughness: 0.92, color: '#b8b2a6' }, 'rough'),
       thatch: std({ map: th.map, normalMap: th.normalMap, roughness: 0.97 }, 'thatch'),
       tile: std({ map: tl.map, normalMap: tl.normalMap, roughness: 0.75 }, 'tile'),
-      slate: std({ map: tl.map, normalMap: tl.normalMap, roughness: 0.6, color: '#5c6f86' }, 'slate'),
+      slate: std({ map: sl.map, normalMap: sl.normalMap, roughness: 0.62 }, 'slate'),
       glass: std({ color: '#1d2a33', roughness: 0.15, metalness: 0.2, emissive: '#3a2a10', emissiveIntensity: 0.25 }, 'glass'),
       iron: std({ color: '#3a3b3e', roughness: 0.45, metalness: 0.85 }, 'iron'),
       clothRed: std({ map: clothTexture('#a8231d', '#e9dcc0'), roughness: 0.9, side: THREE.DoubleSide }, 'clothRed'),

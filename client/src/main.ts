@@ -39,6 +39,7 @@ async function main(): Promise<void> {
   if (params.has('preview')) {
     // World preview camera: ?preview=x,y,z,yawDeg,pitchDeg
     const [x, y, z, yaw, pitch] = (params.get('preview') || '0,30,60,0,-10').split(',').map(Number);
+    game.playing = false;
     game.camera.position.set(x, y, z);
     game.camera.rotation.set((pitch * Math.PI) / 180, (yaw * Math.PI) / 180, 0, 'YXZ');
   }

@@ -100,14 +100,31 @@ export class Terrain {
           float pebble = smoothstep(0.82, 0.88, akVnoise(p.xz * 9.0));
           dirt = mix(dirt, vec3(0.2, 0.18, 0.15), pebble * 0.45);
           col = mix(col, dirt, smoothstep(0.15, 0.65, sp.r + (meso - 0.5) * 0.35));
-          // Village packed earth / cobbles.
-          vec2 cob = vec2(0.0, 1.0);
+          // Village packed earth / cobbles: domed setts of mixed stone, earthy joints with moss; towards the edge of
+          // the paving whole stones drop out into packed earth instead of fading (no ghost joints).
+          float cobBevel = 0.0;
+          vec2 cobDir = vec2(0.0);
           if (sp.g > 0.02) {
-            cob = akVoronoi(p.xz * 1.6);
-            vec3 cobble = mix(vec3(0.13, 0.12, 0.10), vec3(0.26, 0.23, 0.19), akHash12(floor(p.xz * 1.6 + cob.x)));
-            cobble *= mix(0.55, 1.0, smoothstep(0.02, 0.09, cob.y));
-            vec3 village = mix(dirt * 0.95, cobble, smoothstep(0.55, 0.85, sp.g));
-            col = mix(col, village, smoothstep(0.1, 0.5, sp.g));
+            float camD = length(vWPos - cameraPosition);
+            float near = 1.0 - smoothstep(25.0, 70.0, camD);
+            vec4 cb = akCobble(p.xz * vec2(3.7, 4.1));
+            float h = cb.x;
+            vec3 stone = h < 0.42 ? vec3(0.27, 0.252, 0.222) : h < 0.67 ? vec3(0.3, 0.262, 0.205) : h < 0.87 ? vec3(0.31, 0.24, 0.162) : vec3(0.19, 0.186, 0.18);
+            stone *= 0.74 + fract(h * 17.3) * 0.42;
+            stone *= 0.9 + akVnoise(p.xz * 11.0) * 0.2;
+            float cover = smoothstep(0.5, 0.9, sp.g + (meso - 0.5) * 0.5 + (micro - 0.5) * 0.15);
+            float present = step(fract(h * 31.7), cover);
+            float joint = (1.0 - smoothstep(0.03, 0.09, cb.w)) * present;
+            vec3 jointCol = mix(vec3(0.075, 0.055, 0.032), vec3(0.05, 0.075, 0.022), smoothstep(0.45, 0.75, meso) * 0.8);
+            vec3 earth = dirt * 0.95;
+            vec3 cobble = mix(mix(earth, stone, present), jointCol, joint);
+            // Far away the setts average out (no shimmering): blend by coverage instead of per-stone.
+            vec3 farCol = mix(earth, vec3(0.255, 0.235, 0.2) * 0.92, cover);
+            cobble = mix(farCol, cobble, near);
+            float vk = smoothstep(0.1, 0.5, sp.g);
+            col = mix(col, cobble, vk);
+            cobBevel = (1.0 - smoothstep(0.03, 0.22, cb.w)) * near * vk * present;
+            cobDir = normalize(cb.yz + 1e-4);
           }
           // Sand & wet bank.
           vec3 sand = mix(vec3(0.42, 0.34, 0.18), vec3(0.14, 0.12, 0.07), smoothstep(0.6, -0.4, p.y));
@@ -125,7 +142,7 @@ export class Terrain {
           // Battle damage: scorch + molten crack glow.
           float sc = dmg.r;
           col = mix(col, vec3(0.05, 0.04, 0.035), smoothstep(0.05, 0.6, sc) * 0.85);
-          tRough = mix(0.93, 0.8, sp.b) - pebble * 0.1;
+          tRough = mix(0.93, 0.8, sp.b) - pebble * 0.1 - cobBevel * 0.12;
           tRough = mix(tRough, 0.72, rockM);
           tRough = mix(tRough, 0.55, snow);
           // Detail normal from noise gradient.
@@ -133,8 +150,10 @@ export class Terrain {
           float h0 = akVnoise(p.xz * 2.2);
           float hx = akVnoise((p.xz + vec2(e, 0.0)) * 2.2);
           float hz = akVnoise((p.xz + vec2(0.0, e)) * 2.2);
-          float bumpK = mix(0.35, 0.9, rockM) + sp.g * 0.6 * smoothstep(0.02, 0.09, cob.y);
+          float bumpK = mix(0.35, 0.9, rockM);
           tDetailN = vec3(h0 - hx, 0.0, h0 - hz) * bumpK;
+          // Rounded sett tops: the surface falls away from each stone's centre towards its joints.
+          tDetailN.xz -= cobDir * cobBevel * 0.75;
           return col;
         }
         float crackGlow(vec3 p) {

@@ -401,6 +401,69 @@ export function roofTileTexture(): PbrSet {
   return set;
 }
 
+/** Overlapping split-slate shingles: blue-grey with mineral variation and a shadow under every course. */
+export function slateTexture(): PbrSet {
+  const key = 'slate';
+  if (cache.has(key)) return cache.get(key)!;
+  const S = 256;
+  const rng = new Rng(17);
+  const n = new Noise(17);
+  const [c, ctx] = canvas(S, S);
+  const [hc, hctx] = canvas(S, S);
+  ctx.fillStyle = '#2d3033';
+  ctx.fillRect(0, 0, S, S);
+  hctx.fillStyle = '#303030';
+  hctx.fillRect(0, 0, S, S);
+  const rows = 12;
+  const rh = S / rows;
+  for (let r = 0; r < rows; r++) {
+    let x = r % 2 ? -rng.range(6, 14) : 0;
+    while (x < S) {
+      const w = rng.range(17, 27);
+      const sh = rng.range(0.82, 1.12);
+      const tint = rng.next();
+      const base = tint < 0.25 ? [104, 104, 110] : tint < 0.6 ? [98, 102, 106] : tint < 0.85 ? [112, 110, 106] : [90, 92, 100];
+      const y = r * rh;
+      for (const ox of [0, S, -S]) {
+        const g = ctx.createLinearGradient(0, y, 0, y + rh * 1.2);
+        g.addColorStop(0, `rgb(${base.map((v) => Math.round(v * sh * 0.82)).join(',')})`);
+        g.addColorStop(0.75, `rgb(${base.map((v) => Math.round(v * sh)).join(',')})`);
+        g.addColorStop(1, `rgb(${base.map((v) => Math.round(v * sh * 1.08)).join(',')})`);
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.roundRect(x + 1 + ox, y, w - 2, rh * 1.2, [0, 0, 2, 2]);
+        ctx.fill();
+        const hg = hctx.createLinearGradient(0, y, 0, y + rh * 1.2);
+        hg.addColorStop(0, '#5a5a5a');
+        hg.addColorStop(1, '#e8e8e8');
+        hctx.fillStyle = hg;
+        hctx.beginPath();
+        hctx.roundRect(x + 1 + ox, y, w - 2, rh * 1.2, [0, 0, 2, 2]);
+        hctx.fill();
+      }
+      x += w;
+    }
+    // Shadow line cast by the course above.
+    ctx.fillStyle = 'rgba(10,12,16,0.55)';
+    ctx.fillRect(0, r * rh, S, 2);
+  }
+  // Lichen and weathering.
+  const img = ctx.getImageData(0, 0, S, S);
+  for (let y = 0; y < S; y++)
+    for (let x = 0; x < S; x++) {
+      const k = (y * S + x) * 4;
+      const v = 0.88 + tile(n, x, y, S, S, 10) * 0.18;
+      const lichen = Math.max(0, tile(n, x + 97, y + 31, S, S, 5) - 0.72) * 2.2;
+      img.data[k] = Math.min(255, img.data[k] * v + lichen * 70);
+      img.data[k + 1] = Math.min(255, img.data[k + 1] * v + lichen * 62);
+      img.data[k + 2] = Math.min(255, img.data[k + 2] * v + lichen * 20);
+    }
+  ctx.putImageData(img, 0, 0);
+  const set = { map: toTexture(c), normalMap: normalFromHeight(hc, 3) };
+  cache.set(key, set);
+  return set;
+}
+
 /** Heraldic banner cloth. */
 export function bannerTexture(color: string, sigil: 'sun' | 'dragon' | 'tower'): THREE.Texture {
   const key = `banner-${color}-${sigil}`;
