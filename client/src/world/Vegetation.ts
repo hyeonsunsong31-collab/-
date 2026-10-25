@@ -275,6 +275,11 @@ export class Vegetation {
   private p = new THREE.Vector3();
   readonly felled = new Set<Scatter>();
   readonly trunkColliders: { x: number; z: number; r: number; tree: Scatter }[] = [];
+  /** Boulder instance slots (for shattering) and the boulders already destroyed. */
+  private rockSlots = new Map<Scatter, { im: THREE.InstancedMesh; i: number }>();
+  readonly shattered = new Set<Scatter>();
+  /** Trees snapped by blasts, toppling away from the explosion. */
+  private falling: { g: THREE.Group; axis: THREE.Vector3; t: number; dir: number }[] = [];
 
   constructor(
     private data: WorldData,
@@ -471,6 +476,7 @@ export class Vegetation {
         this.s.setScalar(r.s);
         this.p.set(r.x, r.y - r.s * 0.2, r.z);
         im.setMatrixAt(i, this.m.compose(this.p, this.q, this.s));
+        this.rockSlots.set(r, { im, i });
       }
       im.count = list.length;
       im.castShadow = true;
@@ -524,7 +530,7 @@ export class Vegetation {
     }
   }
 
-  /** Fell trees caught in a blast; returns the felled trees (for debris VFX). */
+  /** Fell trees caught in a blast: they snap at the base and topple away from it. Returns the felled trees. */
   blast(x: number, z: number, radius: number): Scatter[] {
     const out: Scatter[] = [];
     for (const c of this.trunkColliders) {
@@ -532,9 +538,68 @@ export class Vegetation {
       if (Math.hypot(c.x - x, c.z - z) < radius) {
         this.felled.add(c.tree);
         out.push(c.tree);
+        this.topple(c.tree, x, z);
       }
     }
     if (out.length) this.update(this.lastBucket, true);
     return out;
+  }
+
+  private topple(t: Scatter, bx: number, bz: number): void {
+    const type = this.types.find((ty) => ty.trees.includes(t));
+    if (!type) return;
+    const g = new THREE.Group();
+    g.position.set(t.x, t.y, t.z);
+    for (const src of [type.lods[0].bark, type.lods[0].leaves]) {
+      const im = new THREE.InstancedMesh(src.geometry, src.material, 1);
+      this.q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), t.r);
+      this.s.setScalar(t.s);
+      im.setMatrixAt(0, this.m.compose(this.p.set(0, 0, 0), this.q, this.s));
+      im.castShadow = true;
+      im.receiveShadow = true;
+      im.frustumCulled = false;
+      g.add(im);
+    }
+    // Fall away from the blast centre.
+    const away = new THREE.Vector3(t.x - bx, 0, t.z - bz);
+    if (away.lengthSq() < 1e-4) away.set(Math.random() - 0.5, 0, Math.random() - 0.5);
+    away.normalize();
+    const axis = new THREE.Vector3(away.z, 0, -away.x);
+    this.group.add(g);
+    this.falling.push({ g, axis, t: 0, dir: 1 });
+  }
+
+  /** Destroy boulders inside a blast; returns them (for rubble VFX). */
+  shatterRocks(x: number, z: number, radius: number): Scatter[] {
+    const out: Scatter[] = [];
+    const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    for (const [r, slot] of this.rockSlots) {
+      if (this.shattered.has(r)) continue;
+      if (Math.hypot(r.x - x, r.z - z) > radius + r.s * 0.6) continue;
+      this.shattered.add(r);
+      slot.im.setMatrixAt(slot.i, zero);
+      slot.im.instanceMatrix.needsUpdate = true;
+      out.push(r);
+    }
+    return out;
+  }
+
+  /** Animate toppling trees: an accelerating fall, a small bounce, then they sink away. */
+  animate(dt: number): void {
+    for (let i = this.falling.length - 1; i >= 0; i--) {
+      const f = this.falling[i];
+      f.t += dt;
+      const fallT = 1.5;
+      let ang: number;
+      if (f.t < fallT) ang = (Math.PI / 2 - 0.08) * Math.pow(f.t / fallT, 2.2);
+      else ang = Math.PI / 2 - 0.08 - Math.abs(Math.sin((f.t - fallT) * 9)) * 0.08 * Math.exp(-(f.t - fallT) * 4);
+      f.g.quaternion.setFromAxisAngle(f.axis, ang);
+      if (f.t > 6) f.g.position.y -= dt * 1.2;
+      if (f.t > 8) {
+        this.group.remove(f.g);
+        for (const c of f.g.children) (c as THREE.InstancedMesh).dispose();
+        this.falling.splice(i, 1);
+      }
+    }
   }
 }

@@ -377,6 +377,11 @@ export class Character {
 
   /* --------------------------------------------------------------- queries */
 
+  /** Currently visible hair mesh (afterimages copy it). */
+  get hairMesh(): THREE.SkinnedMesh | null {
+    return this.hair?.mesh ?? null;
+  }
+
   bone(name: BoneName): THREE.Bone {
     return this.rig.byName[name];
   }
@@ -508,7 +513,7 @@ export class Character {
       u.uGlow.value = (this.hairGlow * 0.9 + this.glow * 0.25) * pulse;
       u.uHitFlash.value = this.hitFlash;
     }
-    this.hitFlash = Math.max(0, this.hitFlash - dt * 7);
+    this.hitFlash = Math.max(0, this.hitFlash - dt * 11);
     // Blink.
     this.blinkTimer -= dt;
     const wasBlink = this.faceState.blink;

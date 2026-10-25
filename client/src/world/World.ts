@@ -86,8 +86,10 @@ export class World {
     this.data.syncHeightTex();
     this.data.scorch(x, z, radius, 1);
     const felled = this.vegetation.blast(x, z, radius * 1.15);
-    if (felled.length) this.colliders.remove((c) => c.kind === 'circle' && felled.some((t) => t.x === c.x && t.z === c.z));
-    return felled;
+    const rocks = this.vegetation.shatterRocks(x, z, radius);
+    const gone = [...felled, ...rocks];
+    if (gone.length) this.colliders.remove((c) => c.kind === 'circle' && gone.some((t) => t.x === c.x && t.z === c.z));
+    return { felled, rocks };
   }
 
   update(dt: number, camera: THREE.PerspectiveCamera): void {
@@ -104,6 +106,7 @@ export class World {
     this.terrain.update(camera.position);
     this.grass.update(camera);
     this.vegetation.update(camera.position);
+    this.vegetation.animate(dt);
     this.settlements.update(dt);
     this.water.update(dt);
     this.data.coolDamage(dt);

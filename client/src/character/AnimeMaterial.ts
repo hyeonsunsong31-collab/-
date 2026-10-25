@@ -97,7 +97,7 @@ export function animeMaterial(
             outgoingLight = mix(outgoingLight, outgoingLight * (uShadeTint * 1.25), shade * 0.35);
             outgoingLight += uRimColor * rim * uRimStrength;
             outgoingLight += uGlowColor * uGlow * (0.25 + fres * 1.6);
-            outgoingLight = mix(outgoingLight, vec3(2.2), uHitFlash);
+            outgoingLight = mix(outgoingLight, outgoingLight * 1.6 + vec3(0.85, 0.82, 0.78), uHitFlash * 0.75);
           }
           #include <opaque_fragment>`,
         );

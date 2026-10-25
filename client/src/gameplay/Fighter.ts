@@ -30,6 +30,8 @@ const _m = [0, 0, 0] as [number, number, number];
 export class Fighter {
   readonly pos = new THREE.Vector3();
   readonly vel = new THREE.Vector3();
+  /** Knockback / external push (m/s), integrated even during actions and decayed by friction. */
+  readonly knock = new THREE.Vector3();
   yaw = 0;
   move: MoveState = 'ground';
   grounded = true;
@@ -66,6 +68,8 @@ export class Fighter {
   rooted = false;
   /** Gravity disabled (hit-launch hang, special moves). */
   floatTimer = 0;
+  /** Vertical position is driven by script / root motion this frame (no gravity or ground snapping). */
+  kinematicY = false;
   combatTimer = 0;
 
   constructor(
@@ -217,7 +221,7 @@ export class Fighter {
       const k = 1 - Math.exp(-dt * accel * 0.22);
       this.vel.x += (tx - this.vel.x) * k;
       this.vel.z += (tz - this.vel.z) * k;
-      if (!grounded) {
+      if (!grounded && !this.kinematicY) {
         if (this.floatTimer > 0) {
           this.floatTimer -= dt;
           this.vel.y *= Math.exp(-dt * 6);
@@ -229,9 +233,15 @@ export class Fighter {
         this.pos.x += this.vel.x * dt;
         this.pos.z += this.vel.z * dt;
       }
-      if (!grounded) this.pos.y += this.vel.y * dt;
+      if (!grounded && !this.kinematicY) this.pos.y += this.vel.y * dt;
     }
     if (hasAction) this.applyRootMotion();
+    if (this.knock.lengthSq() > 1e-4) {
+      this.pos.x += this.knock.x * dt;
+      this.pos.z += this.knock.z * dt;
+      const fr = this.move === 'ground' ? 7 : this.move === 'fly' ? 3 : 0.6;
+      this.knock.multiplyScalar(Math.exp(-dt * fr));
+    }
 
     // Collisions with props / buildings / trunks.
     const out = { x: 0, z: 0 };
@@ -247,7 +257,9 @@ export class Fighter {
     // Ground contact. Fighters can skim over water like solid ground (anime style).
     let g = this.world.groundAt(this.pos.x, this.pos.z, this.pos.y + 0.5);
     g = Math.max(g, WATER_LEVEL - 0.02);
-    if (this.move === 'fly') {
+    if (this.kinematicY) {
+      if (this.pos.y < g) this.pos.y = g;
+    } else if (this.move === 'fly') {
       if (this.pos.y < g + 0.05) {
         this.pos.y = g + 0.05;
         if (this.vel.y < 0) this.vel.y = 0;

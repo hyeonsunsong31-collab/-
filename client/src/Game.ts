@@ -12,6 +12,16 @@ import { HERO_LOOK } from './character/Looks.ts';
 import { animeShared } from './character/AnimeMaterial.ts';
 import { clipLibrary } from './animation/clips/index.ts';
 import { Player } from './gameplay/Player.ts';
+import { Hero } from './gameplay/Hero.ts';
+import { CombatSystem } from './combat/CombatSystem.ts';
+import { BotControls } from './ai/BotControls.ts';
+import { RivalAI } from './ai/RivalAI.ts';
+import { RIVAL_LOOK } from './character/Looks.ts';
+import { ScreenFx } from './fx/ScreenFx.ts';
+import { Vfx } from './fx/Vfx.ts';
+import { ChainAttack } from './combat/ChainAttack.ts';
+import type { CombatEvent } from './combat/CombatSystem.ts';
+import { baseStats, generateRival, type Difficulty, type Stats } from '@ak/shared';
 
 export type BootProgress = (frac: number, msg: string) => Promise<void>;
 
@@ -27,6 +37,12 @@ export class Game {
   input!: Input;
   camRig!: CameraRig;
   player!: Player;
+  combat!: CombatSystem;
+  screenFx!: ScreenFx;
+  vfx!: Vfx;
+  chain!: ChainAttack;
+  /** Non-player heroes (rival bots). */
+  readonly bots: { hero: Hero; ai: RivalAI }[] = [];
   ready = false;
   /** When false the gameplay loop does not drive the camera (preview / photo modes). */
   playing = false;
@@ -40,7 +56,7 @@ export class Game {
     this.camera.position.set(0, 30, 60);
     // A resize clears the drawing buffer; when the realtime loop is halted (tests) repaint the last frame.
     window.addEventListener('resize', () => {
-      if (this.halted && this.ready) requestAnimationFrame(() => this.renderer.render(0));
+      if (this.halted && this.ready) requestAnimationFrame(() => requestAnimationFrame(() => this.renderer.render(0)));
     });
   }
 
@@ -85,8 +101,18 @@ export class Game {
     await progress(0.82, 'Awakening the fighter…');
     this.input = new Input(this.canvas);
     this.camRig = new CameraRig(this.camera, this.world);
+    this.combat = new CombatSystem(this.clock, this.world);
     const hero = new Character(HERO_LOOK, this.lighting, clipLibrary());
-    this.player = new Player(hero, this.world, this.input, this.camRig);
+    this.player = new Player(hero, this.world, baseStats(), 1, this.input, this.camRig);
+    this.combat.add(this.player);
+    this.combat.player = this.player;
+    this.screenFx = new ScreenFx(this.renderer, this.camera, this.clock);
+    this.combat.on((e) => this.onCombatEvent(e));
+    this.vfx = new Vfx(this.lighting, this.world, q.particleScale, this.player);
+    this.vfx.connect(this.combat);
+    this.vfx.track(this.player, true);
+    this.scene.add(this.vfx.group);
+    this.chain = new ChainAttack(this.clock, this.combat, this.camRig, this.input);
     this.scene.add(hero.group);
     const spawn = this.findSpawn(6, 22);
     this.player.teleport(spawn, Math.PI);
@@ -103,6 +129,56 @@ export class Game {
     await progress(1, 'Ready');
   }
 
+  /** Camera + screen presentation for combat events. */
+  private onCombatEvent(e: CombatEvent): void {
+    const p = this.player;
+    this.screenFx.handle(e, p);
+    const cam = this.camRig;
+    switch (e.type) {
+      case 'hit':
+        if (e.attacker === p || e.target === p) {
+          const tick = e.def.id.endsWith('_tick');
+          cam.shake(e.def.shake * (tick ? 0.35 : 1) * (e.target === p ? 1.2 : 1) * (e.res.crit ? 1.2 : 1));
+          if (tick) break;
+          if (e.def.tier >= 3 && e.attacker === p) cam.punch(-0.35);
+          if (e.def.kind === 'knockdown' && e.attacker === p) cam.dutch(e.def.tier >= 4 ? 7 : 4);
+        }
+        break;
+      case 'blast':
+      case 'crater': {
+        const d = (e.type === 'blast' ? e.pos : e.pos).distanceTo(p.pos);
+        cam.shake(Math.max(0, 0.7 - d * 0.02));
+        break;
+      }
+      case 'slam':
+        if (e.pos.distanceTo(p.pos) < 25) cam.shake(0.25);
+        break;
+      case 'perfectDodge':
+        if (e.who === p) cam.dutch(-5);
+        break;
+    }
+  }
+
+  /** Spawn a rival bot (training dummy / sparring partner) in front of the player. */
+  spawnRival(difficulty: Difficulty = 'normal', dist = 9, stats?: Stats, level?: number): Hero {
+    const spec = generateRival(this.player.stats, this.player.level, difficulty, Math.floor(Math.random() * 1e9));
+    const ctl = new BotControls();
+    const ch = new Character(RIVAL_LOOK, this.lighting, clipLibrary());
+    const p = this.player.pos.clone().addScaledVector(this.player.forward(), dist);
+    const spot = this.findSpawn(p.x, p.z);
+    const hero = new Hero(ch, this.world, spec.name, 'foe', level ?? spec.level, stats ?? spec.stats, ctl);
+    hero.maxTier = spec.maxTier;
+    hero.teleport(spot, this.player.yaw + Math.PI);
+    const ai = new RivalAI(spec.skill, spec.style);
+    ai.foe = this.player;
+    ctl.brain = (h, c, dt) => ai.step(h, c, dt);
+    this.scene.add(ch.group);
+    this.combat.add(hero);
+    this.vfx.track(hero);
+    this.bots.push({ hero, ai });
+    return hero;
+  }
+
   /** Nearest walkable spot to (x, z) that is clear of colliders. */
   findSpawn(x: number, z: number): THREE.Vector3 {
     const out = { x: 0, z: 0 };
@@ -110,7 +186,8 @@ export class Game {
       for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
         const px = x + Math.cos(a) * r;
         const pz = z + Math.sin(a) * r;
-        const y = this.world.groundAt(px, pz, 1e4);
+        // Ground level only (never the top of a trunk or roof collider).
+        const y = this.world.groundAt(px, pz, this.world.terrainHeight(px, pz) + 0.3);
         if (!this.world.colliders.resolve(px, pz, 0.6, y, 1.8, out) && !this.world.isWater(px, pz)) return new THREE.Vector3(px, y, pz);
         if (r === 0) break;
       }
@@ -142,9 +219,17 @@ export class Game {
     const dt = this.clock.realDt;
     if (this.playing) {
       this.input.update(dt);
+      this.chain.update(dt, this.clock.playerDt);
       this.player.update(this.clock.playerDt);
+      for (const b of this.bots) b.hero.update(this.clock.worldDt);
+      this.combat.update(this.clock.worldDt, this.clock.playerDt);
       this.camRig.update(dt, this.input, this.player.camCtx);
       this.input.endFrame();
+      const pl = this.player;
+      const boosting = pl.flying && pl.vel.length() > pl.flySpeed * 1.4 ? 0.6 : pl.sprinting ? 0.22 : 0;
+      const charging = pl.power === 'charging' ? 1 : pl.power === 'powerup' ? 0.55 : pl.actionName === 'beam_charge' || pl.actionName === 'heavy_charge' ? 0.4 : 0;
+      this.screenFx.update(dt, pl, boosting, charging);
+      this.vfx.update(this.clock.worldDt, dt, this.camera);
     }
     for (const fn of this.onFrame) fn(this);
     this.camera.updateMatrixWorld();

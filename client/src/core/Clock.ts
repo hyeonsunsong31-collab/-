@@ -15,6 +15,8 @@ export class Clock {
   private slowWorld = 1;
   private slowPlayer = 1;
   private freezes = new Set<string>();
+  /** Freezes that also stop the player (chain-attack prompt, pause). */
+  private fullFreezes = new Set<string>();
   /** Debug/test override (e.g. pause world for screenshots). */
   timeScale = 1;
 
@@ -47,6 +49,10 @@ export class Clock {
     if (this.freezes.size > 0) {
       w = 0;
     }
+    if (this.fullFreezes.size > 0) {
+      w = 0;
+      p = 0;
+    }
     this.worldDt = dt * w;
     this.playerDt = dt * p;
     this.worldTime += this.worldDt;
@@ -74,12 +80,13 @@ export class Clock {
     return t < 0.08 ? t / 0.08 : t < 0.7 ? 1 : 1 - (t - 0.7) / 0.3;
   }
 
-  freeze(key: string, on: boolean): void {
-    if (on) this.freezes.add(key);
-    else this.freezes.delete(key);
+  freeze(key: string, on: boolean, player = false): void {
+    const set = player ? this.fullFreezes : this.freezes;
+    if (on) set.add(key);
+    else set.delete(key);
   }
 
   get frozen(): boolean {
-    return this.freezes.size > 0;
+    return this.freezes.size > 0 || this.fullFreezes.size > 0;
   }
 }

@@ -141,7 +141,7 @@ export class Terrain {
           col = mix(col, vec3(0.82, 0.86, 0.92), snow);
           // Battle damage: scorch + molten crack glow.
           float sc = dmg.r;
-          col = mix(col, vec3(0.05, 0.04, 0.035), smoothstep(0.05, 0.6, sc) * 0.85);
+          col = mix(col, vec3(0.075, 0.058, 0.042) * (0.8 + micro * 0.4), smoothstep(0.05, 0.6, sc) * 0.78);
           tRough = mix(0.93, 0.8, sp.b) - pebble * 0.1 - cobBevel * 0.12;
           tRough = mix(tRough, 0.72, rockM);
           tRough = mix(tRough, 0.55, snow);
@@ -160,9 +160,12 @@ export class Terrain {
           vec2 suv = (p.xz + uWorldHalf) / (uWorldHalf * 2.0);
           float g = texture2D(uDamage, suv).g;
           if (g < 0.01) return 0.0;
-          vec2 v = akVoronoi(p.xz * 0.9);
-          float crack = 1.0 - smoothstep(0.0, 0.06, v.y);
-          return crack * g;
+          // Jagged fissures: domain-warped Voronoi edges, thinner and denser toward the hot centre.
+          vec2 w = p.xz * 2.1 + vec2(akVnoise(p.xz * 1.3), akVnoise(p.xz * 1.3 + 7.1)) * 1.4;
+          vec2 v = akVoronoi(w);
+          float width = mix(0.015, 0.06, g);
+          float crack = 1.0 - smoothstep(0.0, width, v.y);
+          return crack * smoothstep(0.05, 0.6, g) * g;
         }`,
       )
       .replace(

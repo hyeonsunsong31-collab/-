@@ -130,6 +130,7 @@ export class CombatFxEffect extends Effect {
       uniform float uEdge;
       uniform float uImpact;
       uniform float uImpactMode;
+      uniform float uImpactDepth;
       uniform float uFlash;
       uniform vec3 uFlashColor;
       uniform float uRadial;
@@ -184,10 +185,17 @@ export class CombatFxEffect extends Effect {
           c = mix(c, g, uGrey);
         }
         if (uImpact > 0.001) {
+          // Manga impact frame: everything near the strike becomes an ink silhouette over a blown-out
+          // background with radial streaks (mode 1 = crimson variant when the player is the one hit).
+          float dz = linDepth(uv);
+          float sil = 1.0 - smoothstep(uImpactDepth - 1.5, uImpactDepth + 1.5, dz);
+          vec2 d = (uv - uRadialCenter) * asp;
+          float ang = atan(d.y, d.x);
+          float streak = smoothstep(0.55, 0.95, akVnoise(vec2(ang * 30.0, 3.7))) * smoothstep(0.05, 0.6, length(d));
           float l = lumaOf(c);
-          vec3 a = uImpactMode < 0.5
-            ? vec3(1.0 - smoothstep(0.22, 0.5, l))
-            : mix(vec3(0.02, 0.0, 0.01), vec3(1.0, 0.18, 0.08), smoothstep(0.22, 0.5, l));
+          vec3 bg = uImpactMode < 0.5 ? vec3(0.97, 0.96, 0.92) : vec3(0.95, 0.12, 0.06);
+          vec3 ink = uImpactMode < 0.5 ? vec3(0.02) : vec3(0.03, 0.0, 0.0);
+          vec3 a = mix(bg * (1.0 - streak * 0.35), ink + vec3(smoothstep(0.75, 1.0, l)) * 0.25, sil);
           c = mix(c, a, uImpact);
         }
         if (uSpeed > 0.001) {
@@ -215,6 +223,7 @@ export class CombatFxEffect extends Effect {
           ['uEdge', new THREE.Uniform(0.85)],
           ['uImpact', new THREE.Uniform(0)],
           ['uImpactMode', new THREE.Uniform(0)],
+          ['uImpactDepth', new THREE.Uniform(8)],
           ['uFlash', new THREE.Uniform(0)],
           ['uFlashColor', new THREE.Uniform(new THREE.Color(1, 1, 1))],
           ['uRadial', new THREE.Uniform(0)],

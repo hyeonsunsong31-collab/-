@@ -122,10 +122,15 @@ export class CameraRig {
       const toT = _v.subVectors(ctx.target, ctx.anchor);
       toT.y = 0;
       if (toT.lengthSq() > 0.5) {
-        const want = Math.atan2(toT.x, toT.z) + Math.PI;
+        // Swing behind the player but ~24° off the player→target line (on whichever side the camera already is),
+        // so the target is framed beside the player instead of hidden behind it.
+        const base = Math.atan2(toT.x, toT.z) + Math.PI;
+        let rel = this.yaw - base;
+        rel = Math.atan2(Math.sin(rel), Math.cos(rel));
+        const want = base + (rel >= 0 ? 1 : -1) * 0.42;
         let d = want - this.yaw;
         d = Math.atan2(Math.sin(d), Math.cos(d));
-        this.yaw += d * Math.min(1, dt * 1.4) * 0.6;
+        this.yaw += d * Math.min(1, dt * 2.2);
       }
     }
 
@@ -174,7 +179,7 @@ export class CameraRig {
     }
     const pos = new THREE.Vector3().copy(pivot).addScaledVector(dir, d);
     const look = new THREE.Vector3().copy(pivot).addScaledVector(dir, -2);
-    if (ctx.target) look.lerp(ctx.target, 0.12);
+    if (ctx.target) look.lerp(ctx.target, 0.3);
 
     // FOV.
     let fov = this.baseFov + (ctx.sprinting ? 7 : 0) + (ctx.flying ? Math.min(16, speed * 0.35) : 0) + this.fovKick;
