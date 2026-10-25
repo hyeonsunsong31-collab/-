@@ -121,7 +121,25 @@ export class Player extends Hero {
     }
   }
 
+  /** Tab / TARGET: cycle through nearby foes, nearest first. */
+  private cycleTarget(): void {
+    const cs = this.combat;
+    if (!cs) return;
+    const list = cs
+      .foesOf(this)
+      .filter((f) => f.alive && f.pos.distanceTo(this.pos) < 32)
+      .sort((a, b) => a.pos.distanceTo(this.pos) - b.pos.distanceTo(this.pos));
+    if (!list.length) {
+      this.target = null;
+      return;
+    }
+    const i = this.target ? list.indexOf(this.target) : -1;
+    this.target = list[(i + 1) % list.length];
+    this.fx('targetLock', { who: this.target });
+  }
+
   override update(dt: number): void {
+    if (!this.scripted && this.input.pressed('lock')) this.cycleTarget();
     super.update(dt);
     const hv = Math.hypot(this.vel.x, this.vel.z);
     const sprintNow = this.sprinting;

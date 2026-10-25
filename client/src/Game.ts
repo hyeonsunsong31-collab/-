@@ -30,6 +30,15 @@ import { ProgressToasts } from './ui/ProgressToasts.ts';
 import { portraitShot } from './camera/Shots.ts';
 import type { SaveService } from './net/SaveService.ts';
 import { Arena } from './gameplay/Arena.ts';
+import { Hud } from './ui/Hud.ts';
+import { MapView, type MapMarker } from './ui/MapView.ts';
+import { TouchControls } from './ui/TouchControls.ts';
+import { TitleScreen, PauseMenu, SettingsPanel, ControlsPanel, DefeatScreen } from './ui/Screens.ts';
+import type { Settings } from './core/Settings.ts';
+import { isTouchDevice } from './render/Quality.ts';
+import { titleShot } from './camera/Shots.ts';
+import { POIS } from './world/layout.ts';
+import { COMBAT, nextForm } from '@ak/shared';
 import { STAT_KEYS, basePowerLevel, cloneStats, generateRival, type BotSpec, type Difficulty, type Profile, type Stats } from '@ak/shared';
 
 export type BootProgress = (frac: number, msg: string) => Promise<void>;
@@ -56,7 +65,20 @@ export class Game {
   status!: CharacterScreen;
   toasts!: ProgressToasts;
   arena!: Arena;
+  hud!: Hud;
+  map!: MapView;
+  touch!: TouchControls;
+  title!: TitleScreen;
+  pause!: PauseMenu;
+  settingsPanel!: SettingsPanel;
+  controlsPanel!: ControlsPanel;
+  defeat!: DefeatScreen;
+  /** The title screen owns the camera and the fighter. */
+  inTitle = false;
   private captures = new Set<string>();
+  private regionId: string | null = null;
+  private regionCheck = 0;
+  private deadT = 0;
   /** A full-screen menu is open (world frozen, gameplay input captured). */
   menuOpen = false;
   /** Called when the player defeats a foe (progression hooks in here). */
@@ -72,6 +94,7 @@ export class Game {
     private canvas: HTMLCanvasElement,
     readonly qualityLevel: QualityLevel,
     readonly save: SaveService,
+    readonly settings: Settings,
   ) {
     this.camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.15, 12000);
     this.camera.position.set(0, 30, 60);
@@ -154,6 +177,7 @@ export class Game {
     this.status.onClose = () => this.setMenu(false);
     this.bindProgression();
     this.arena = new Arena(this);
+    this.buildInterface();
     this.scene.add(hero.group);
     const spawn = this.findSpawn(6, 22);
     this.player.teleport(spawn, Math.PI);
@@ -206,6 +230,200 @@ export class Game {
     }
   }
 
+  /** HUD, maps, touch controls and the menu screens. */
+  private buildInterface(): void {
+    const ui = document.getElementById('ui-root') ?? document.body;
+    this.hud = new Hud({ skin: HERO_LOOK.skin, eye: HERO_LOOK.eyeColor, band: HERO_LOOK.bands }, HERO_LOOK.hairColor, ui);
+    this.map = new MapView(this.world, ui);
+    this.map.setCamps(this.spawner.camps.map((c) => ({ id: c.id, name: c.name, x: c.x, z: c.z, level: c.level })));
+    this.map.onClose = () => this.setUiCapture('map', false);
+    this.map.onTravelArena = () => this.arena.openSelect();
+    this.touch = new TouchControls(this.input, ui);
+    this.title = new TitleScreen(ui);
+    this.pause = new PauseMenu(ui);
+    this.settingsPanel = new SettingsPanel(ui, this.settings, this.qualityLevel);
+    this.controlsPanel = new ControlsPanel(ui);
+    this.defeat = new DefeatScreen(ui);
+    // Combat feedback: damage numbers, combo counter, haptics.
+    this.combat.on((e) => {
+      this.hud.onCombat(e, this.player);
+      if (e.type === 'hit' && (e.attacker === this.player || e.target === this.player)) this.touch.vibrate(e.target === this.player ? 35 : e.def.tier >= 3 ? 18 : 8);
+    });
+    this.player.fxHook = (name) => {
+      if (name === 'transformBurst') this.hud.formCard(this.player.form);
+    };
+    // Menus.
+    this.pause.onResume = () => this.setPause(false);
+    this.pause.onStatus = () => {
+      this.setPause(false);
+      this.status.open();
+    };
+    this.pause.onMap = () => {
+      this.setPause(false);
+      this.openMap();
+    };
+    this.pause.onSettings = () => this.settingsPanel.open();
+    this.pause.onControls = () => this.controlsPanel.open();
+    this.pause.onTitle = () => {
+      void this.save.settle().finally(() => location.reload());
+    };
+    this.title.onSettings = () => this.settingsPanel.open();
+    this.title.onControls = () => this.controlsPanel.open();
+    this.title.onStart = () => this.leaveTitle();
+    this.defeat.onRise = () => this.respawn();
+    window.addEventListener('keydown', (e) => {
+      if (e.code !== 'Escape' || !this.pause.isOpen || this.settingsPanel.isOpen || this.controlsPanel.isOpen) return;
+      e.preventDefault();
+      this.setPause(false);
+    });
+    this.settings.onChange(() => this.applySettings());
+    this.applySettings();
+  }
+
+  /** Push the player's preferences into the live systems. */
+  applySettings(): void {
+    const s = this.settings.data;
+    this.input.sensitivity = s.sensitivity;
+    this.input.invertY = s.invertY;
+    this.touch.sensitivity = s.sensitivity;
+    this.camRig.shakeScale = s.shake;
+    this.hud.showDamage = s.damageNumbers;
+    const touch = s.touch === 'on' || (s.touch === 'auto' && isTouchDevice());
+    this.touch.enabled = touch;
+    this.hud.root.classList.toggle('touch', touch);
+    this.hud.touch = touch;
+    this.status.touch = touch;
+    this.toasts.touch = touch;
+  }
+
+  /** Esc / MENU: everything stops, including the fighter. */
+  setPause(on: boolean): void {
+    if (on === this.pause.isOpen) return;
+    if (on) this.pause.open();
+    else this.pause.close();
+    this.clock.freeze('pause', on, true);
+    this.setUiCapture('pause', on);
+  }
+
+  openMap(): void {
+    if (this.map.isOpen) return;
+    this.setUiCapture('map', true, true);
+    this.map.open(this.player.pos.x, this.player.pos.z, this.player.yaw);
+  }
+
+  /** Title screen: the fighter charges their aura under a slow orbit while the menu waits. */
+  enterTitle(): void {
+    const p = this.player;
+    this.inTitle = true;
+    p.scripted = true;
+    p.power = 'powerup';
+    p.playAction('powerup', { fadeIn: 0.3, hold: true });
+    p.char.setExpression('angry');
+    this.camRig.play(titleShot(p));
+    this.setUiCapture('title', true);
+    this.title.show({ mode: this.save.mode, level: this.save.profile.level, name: this.save.profile.name });
+  }
+
+  private leaveTitle(): void {
+    const p = this.player;
+    this.inTitle = false;
+    p.endChainState();
+    p.stopAction(0.35);
+    p.char.setExpression('neutral');
+    p.scripted = false;
+    this.camRig.yaw = p.yaw + Math.PI;
+    this.camRig.pitch = -0.16;
+    this.camRig.releaseShot();
+    this.setUiCapture('title', false);
+    this.regionId = null;
+    this.regionCheck = 1.2;
+  }
+
+  /** Back on your feet in Ashford after a defeat in the field. */
+  private respawn(): void {
+    const p = this.player;
+    this.setUiCapture('defeat', false);
+    p.revive();
+    p.resetForMatch();
+    p.move = 'ground';
+    const spot = this.findSpawn(6, 22);
+    p.teleport(spot, Math.PI);
+    p.invulnTimer = 3;
+    this.camRig.stopShot();
+    this.camRig.yaw = 0;
+    this.camRig.pitch = -0.16;
+    this.deadT = 0;
+    this.regionId = null;
+  }
+
+  /** Minimap / HUD / region banners / defeat, once per frame. */
+  private updateInterface(dt: number): void {
+    const p = this.player;
+    const anyMenu = this.menuOpen || this.map.isOpen || this.pause.isOpen || this.arena.ui.selecting || this.arena.ui.showingResult || this.defeat.isOpen;
+    const showHud = !this.inTitle && !anyMenu;
+    this.hud.visible = showHud;
+    this.hud.cinematic = this.camRig.inCinematic || this.chain.active;
+    this.hud.root.classList.toggle('arena', this.arena.busy);
+    this.map.miniVisible = showHud && !this.arena.busy && !this.camRig.inCinematic;
+    this.touch.visible = showHud && !this.camRig.inCinematic && !this.chain.active && this.arena.phase !== 'intro';
+    if (showHud || this.camRig.inCinematic) {
+      this.hud.update(dt, p, this.save.profile, this.camera, { showTarget: !this.arena.busy && !this.chain.active });
+    }
+    if (this.touch.enabled) {
+      const nf = nextForm(p.form.tier, p.level, p.surge);
+      this.touch.update({
+        exReady: p.energy >= COMBAT.exCost,
+        ultReady: p.surge >= COMBAT.ultimateCost,
+        formReady: !!nf && nf.tier <= p.maxTier,
+        flying: p.flying,
+        sprinting: p.sprinting,
+      });
+    }
+    if (showHud && !this.arena.busy) {
+      const markers: MapMarker[] = [];
+      for (const m of this.spawner.mobs) {
+        if (!m.alive || m.pos.distanceTo(p.pos) > 160) continue;
+        markers.push({ x: m.pos.x, z: m.pos.z, kind: m.target === p ? 'mobHot' : 'mob' });
+      }
+      for (const b of this.bots) if (b.hero.alive) markers.push({ x: b.hero.pos.x, z: b.hero.pos.z, kind: 'rival' });
+      for (const h of this.arena.heralds) markers.push({ x: h.pos.x, z: h.pos.z, kind: 'herald' });
+      this.map.updateMini(p.pos.x, p.pos.z, p.yaw, this.camRig.yaw, markers);
+    }
+    // Region title banners.
+    this.regionCheck -= dt;
+    if (this.regionCheck <= 0 && !this.inTitle) {
+      this.regionCheck = 0.5;
+      let best: (typeof POIS)[number] | null = null;
+      let bestD = Infinity;
+      for (const poi of POIS) {
+        const r = poi.flat > 0 ? poi.flat * 0.9 + 12 : 150;
+        const d = Math.hypot(p.pos.x - poi.x, p.pos.z - poi.z);
+        if (d < r && d < bestD) {
+          best = poi;
+          bestD = d;
+        }
+      }
+      const id = best?.id ?? null;
+      if (id !== this.regionId) {
+        this.regionId = id;
+        if (best && !this.arena.busy) {
+          const camp = this.spawner.camps.find((c) => c.id === best!.id);
+          const tag = { village: 'VILLAGE', arena: 'TRAINING GROUNDS', castle: 'CASTLE', ruin: 'RUINS', lake: 'LAKE', forest: 'FOREST', meadow: 'MEADOWS', camp: 'ENEMY CAMP' }[best.kind];
+          const sub = camp ? `RECOMMENDED LV ${camp.level[0]}–${camp.level[1]}` : best.kind === 'arena' ? 'RANKED SPARS · +5 LEVELS PER WIN' : '';
+          this.hud.region(best.name.toUpperCase(), sub, tag);
+        }
+      }
+    }
+    // Defeat in the field.
+    if (!p.alive && !this.arena.busy) {
+      this.deadT += dt;
+      if (this.deadT > 1.8 && !this.defeat.isOpen) {
+        this.setUiCapture('defeat', true);
+        this.defeat.show();
+      }
+    } else this.deadT = 0;
+  }
+
   /** Kills → XP (batched to the server), level-ups → stats, heal, fanfare; allocations → live stats. */
   private bindProgression(): void {
     this.onKill = (foe) => {
@@ -238,7 +456,7 @@ export class Game {
   /** Whether a full-screen menu may open right now (not mid-cinematic, reeling or dead). */
   get canOpenMenu(): boolean {
     const p = this.player;
-    return this.playing && !this.arena.busy && !this.chain.active && !this.camRig.inCinematic && !this.clock.slowmoActive && p.alive && p.state === 'normal' && !p.busy && (p.move === 'ground' || p.flying);
+    return this.playing && !this.inTitle && !this.arena.busy && !this.chain.active && !this.camRig.inCinematic && !this.clock.slowmoActive && p.alive && p.state === 'normal' && (p.move === 'ground' || p.flying);
   }
 
   /** Freeze the world (the fighter keeps breathing for the portrait camera) and hand input to the UI. */
@@ -345,6 +563,8 @@ export class Game {
     if (this.playing) {
       this.input.update(dt);
       if (this.input.pressed('character') && !this.menuOpen && this.canOpenMenu) this.status.open();
+      if (this.input.pressed('map') && !this.menuOpen && this.canOpenMenu) this.openMap();
+      if (this.input.pressed('menu') && !this.inTitle && !this.arena.ui.selecting && !this.arena.ui.showingResult && !this.defeat.isOpen) this.setPause(true);
       this.chain.update(dt, this.clock.playerDt);
       this.player.update(this.clock.playerDt);
       for (const b of this.bots) b.hero.update(this.clock.worldDt);
@@ -363,7 +583,8 @@ export class Game {
       this.camera.updateMatrixWorld();
       this.nameplates.playerLevel = this.player.level;
       const arenaMenu = this.arena.phase === 'select' || this.arena.phase === 'result' || this.arena.phase === 'loading';
-      this.nameplates.update(dt, this.camera, this.chain.active || this.camRig.inCinematic || arenaMenu);
+      this.nameplates.update(dt, this.camera, this.inTitle || this.chain.active || this.camRig.inCinematic || arenaMenu || this.pause.isOpen || this.map.isOpen);
+      this.updateInterface(dt);
     }
     for (const fn of this.onFrame) fn(this);
     this.camera.updateMatrixWorld();

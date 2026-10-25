@@ -2,6 +2,7 @@ import './ui/styles/base.css';
 import { Game } from './Game.ts';
 import { defaultQuality, type QualityLevel } from './render/Quality.ts';
 import { SaveService } from './net/SaveService.ts';
+import { Settings } from './core/Settings.ts';
 
 const params = new URLSearchParams(location.search);
 
@@ -24,8 +25,10 @@ async function main(): Promise<void> {
     }
   })();
   const quality = (params.get('q') as QualityLevel | null) ?? stored ?? defaultQuality();
+  if (params.has('touch')) localStorage.setItem('ak.settings', JSON.stringify({ ...JSON.parse(localStorage.getItem('ak.settings') || '{}'), touch: 'on' }));
   const save = new SaveService();
-  const game = new Game(canvas, quality, save);
+  const settings = new Settings();
+  const game = new Game(canvas, quality, save, settings);
   (window as unknown as { __game: Game }).__game = game;
   if (params.has('gallery')) {
     await game.bootLite();
@@ -47,6 +50,9 @@ async function main(): Promise<void> {
     game.playing = false;
     game.camera.position.set(x, y, z);
     game.camera.rotation.set((pitch * Math.PI) / 180, (yaw * Math.PI) / 180, 0, 'YXZ');
+  } else if (params.has('title') || (!navigator.webdriver && !params.has('notitle'))) {
+    // Automated test runs skip the title unless they ask for it.
+    game.enterTitle();
   }
   game.start();
 }

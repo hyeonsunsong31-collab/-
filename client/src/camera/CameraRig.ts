@@ -68,8 +68,11 @@ export class CameraRig {
   }
 
   /** Add screen shake (0..1, stacks, decays). */
+  /** Player preference multiplier for every shake. */
+  shakeScale = 1;
+
   shake(amount: number): void {
-    this.trauma = Math.min(1, this.trauma + amount);
+    this.trauma = Math.min(1, this.trauma + amount * this.shakeScale);
   }
 
   kickFov(deg: number): void {

@@ -98,6 +98,32 @@ export function portraitShot(hero: Combatant, side: 1 | -1 = 1): CinematicShot {
 }
 
 /**
+ * Title screen: a slow, low orbit around the fighter charging their aura, framed on the right so the logo and menu
+ * own the left. Breathes in and out of a closer framing. Runs until released.
+ */
+export function titleShot(hero: Combatant): CinematicShot {
+  const right = new THREE.Vector3();
+  const shot: CinematicShot = {
+    dur: 3600,
+    blendIn: 0.05,
+    blendOut: 1.4,
+    frame(u, out) {
+      const t = u * shot.dur;
+      const s = hero.char.scale;
+      const chest = hero.chest(new THREE.Vector3());
+      const breathe = 0.5 + 0.5 * Math.sin(t * 0.16);
+      orbit(hero, 0.55 + t * 0.045, lerp(5.6, 4.4, breathe) * s, lerp(0.35, 0.65, breathe), out.pos);
+      right.subVectors(chest, out.pos).setY(0).normalize();
+      right.set(-right.z, 0, right.x);
+      out.look.copy(chest).addScaledVector(right, -1.35 * s).setY(chest.y + 0.35 * s);
+      out.fov = lerp(44, 38, breathe);
+      out.roll = 2.5 * Math.sin(t * 0.11);
+    },
+  };
+  return shot;
+}
+
+/**
  * Arena intro: open tight and low on the rival, sweep out to a wide profile of both fighters squaring off, then
  * settle behind the player's shoulder so the hand-off to the follow camera is seamless.
  */
