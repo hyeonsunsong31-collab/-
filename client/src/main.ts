@@ -1,6 +1,7 @@
 import './ui/styles/base.css';
 import { Game } from './Game.ts';
 import { defaultQuality, type QualityLevel } from './render/Quality.ts';
+import { SaveService } from './net/SaveService.ts';
 
 const params = new URLSearchParams(location.search);
 
@@ -23,7 +24,8 @@ async function main(): Promise<void> {
     }
   })();
   const quality = (params.get('q') as QualityLevel | null) ?? stored ?? defaultQuality();
-  const game = new Game(canvas, quality);
+  const save = new SaveService();
+  const game = new Game(canvas, quality, save);
   (window as unknown as { __game: Game }).__game = game;
   if (params.has('gallery')) {
     await game.bootLite();
@@ -33,6 +35,9 @@ async function main(): Promise<void> {
     game.start();
     return;
   }
+  await bootProgress(0.02, 'Contacting the realm…');
+  const mode = await save.init({ offline: params.has('offline') || params.has('gallery') });
+  console.info(`[boot] save mode: ${mode} (Lv ${save.profile.level})`);
   await game.boot(bootProgress);
   document.getElementById('boot')?.classList.add('done');
 

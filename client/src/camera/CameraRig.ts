@@ -90,6 +90,12 @@ export class CameraRig {
     this.shotT = 0;
   }
 
+  /** Leave the current shot through its blend-out instead of cutting back to the follow camera. */
+  releaseShot(): void {
+    const s = this.shot;
+    if (s) s.dur = Math.min(s.dur, this.shotT + (s.blendOut ?? 0.35));
+  }
+
   get inCinematic(): boolean {
     return this.shot !== null;
   }

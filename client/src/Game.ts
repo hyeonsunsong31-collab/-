@@ -25,7 +25,11 @@ import type { CompiledClip } from './animation/Clip.ts';
 import { Spawner } from './gameplay/Spawner.ts';
 import { Nameplates } from './ui/Nameplates.ts';
 import type { Combatant } from './combat/Combatant.ts';
-import { baseStats, generateRival, type Difficulty, type Stats } from '@ak/shared';
+import { CharacterScreen } from './ui/CharacterScreen.ts';
+import { ProgressToasts } from './ui/ProgressToasts.ts';
+import { portraitShot } from './camera/Shots.ts';
+import type { SaveService } from './net/SaveService.ts';
+import { STAT_KEYS, basePowerLevel, cloneStats, generateRival, type Difficulty, type Profile, type Stats } from '@ak/shared';
 
 export type BootProgress = (frac: number, msg: string) => Promise<void>;
 
@@ -48,6 +52,10 @@ export class Game {
   spawner!: Spawner;
   nameplates!: Nameplates;
   clips!: Map<string, CompiledClip>;
+  status!: CharacterScreen;
+  toasts!: ProgressToasts;
+  /** A full-screen menu is open (world frozen, gameplay input captured). */
+  menuOpen = false;
   /** Called when the player defeats a foe (progression hooks in here). */
   onKill: ((foe: Combatant) => void) | null = null;
   /** Non-player heroes (rival bots). */
@@ -60,6 +68,7 @@ export class Game {
   constructor(
     private canvas: HTMLCanvasElement,
     readonly qualityLevel: QualityLevel,
+    readonly save: SaveService,
   ) {
     this.camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.15, 12000);
     this.camera.position.set(0, 30, 60);
@@ -113,7 +122,9 @@ export class Game {
     this.combat = new CombatSystem(this.clock, this.world);
     this.clips = clipLibrary();
     const hero = new Character(HERO_LOOK, this.lighting, this.clips);
-    this.player = new Player(hero, this.world, baseStats(), 1, this.input, this.camRig);
+    const prof = this.save.profile;
+    this.player = new Player(hero, this.world, cloneStats(prof.stats), prof.level, this.input, this.camRig);
+    this.player.name = prof.name;
     this.combat.add(this.player);
     this.combat.player = this.player;
     this.screenFx = new ScreenFx(this.renderer, this.camera, this.clock);
@@ -134,6 +145,11 @@ export class Game {
       this.nameplates.remove(m);
       this.vfx.ghosts.forget(m.char);
     };
+    this.toasts = new ProgressToasts();
+    this.status = new CharacterScreen(this.save);
+    this.status.onOpen = () => this.setMenu(true);
+    this.status.onClose = () => this.setMenu(false);
+    this.bindProgression();
     this.scene.add(hero.group);
     const spawn = this.findSpawn(6, 22);
     this.player.teleport(spawn, Math.PI);
@@ -184,6 +200,55 @@ export class Game {
         if (e.by === p && e.who !== p) this.onKill?.(e.who);
         break;
     }
+  }
+
+  /** Kills → XP (batched to the server), level-ups → stats, heal, fanfare; allocations → live stats. */
+  private bindProgression(): void {
+    this.onKill = (foe) => {
+      // Rivals reward through the arena match flow, not per kill.
+      if (foe instanceof Hero) return;
+      this.save.reportKill(foe.level, basePowerLevel(foe.stats));
+    };
+    this.save.onChange((p) => this.syncPlayer(p));
+    this.save.onProgress((e) => {
+      if (e.kind === 'xp' && e.xp) this.toasts.xp(e.xp);
+      if ((e.kind === 'level' || e.kind === 'match') && e.levels && e.levels > 0) {
+        const to = e.profile.level;
+        this.toasts.levelUp(to - e.levels, to, e.profile.unspent);
+        this.vfx.levelUp(this.player);
+        this.camRig.shake(0.2);
+      }
+    });
+  }
+
+  private syncPlayer(p: Profile): void {
+    const pl = this.player;
+    const leveled = p.level > pl.level;
+    const changed = leveled || p.level !== pl.level || STAT_KEYS.some((k) => pl.stats[k] !== p.stats[k]);
+    // A level-up fully restores the fighter; re-allocations keep the current HP fraction.
+    if (changed) pl.setStats(p.level, cloneStats(p.stats), leveled);
+    pl.name = p.name;
+  }
+
+  /** Whether a full-screen menu may open right now (not mid-cinematic, reeling or dead). */
+  get canOpenMenu(): boolean {
+    const p = this.player;
+    return this.playing && !this.chain.active && !this.camRig.inCinematic && !this.clock.slowmoActive && p.alive && p.state === 'normal' && !p.busy && (p.move === 'ground' || p.flying);
+  }
+
+  /** Freeze the world (the fighter keeps breathing for the portrait camera) and hand input to the UI. */
+  private setMenu(on: boolean): void {
+    this.menuOpen = on;
+    this.clock.freeze('menu', on);
+    this.input.uiCapture = on;
+    if (on) {
+      this.input.releaseAll();
+      this.input.clearBuffer();
+      this.camRig.play(portraitShot(this.player));
+    } else {
+      this.camRig.releaseShot();
+    }
+    document.body.classList.toggle('ak-menu-open', on);
   }
 
   /** Spawn a rival bot (training dummy / sparring partner) in front of the player. */
@@ -247,6 +312,7 @@ export class Game {
     const dt = this.clock.realDt;
     if (this.playing) {
       this.input.update(dt);
+      if (this.input.pressed('character') && !this.menuOpen && this.canOpenMenu) this.status.open();
       this.chain.update(dt, this.clock.playerDt);
       this.player.update(this.clock.playerDt);
       for (const b of this.bots) b.hero.update(this.clock.worldDt);

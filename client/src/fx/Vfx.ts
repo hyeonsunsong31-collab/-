@@ -16,8 +16,10 @@ import { Aura } from './Aura.ts';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
 const _c = new THREE.Color();
 const _c2 = new THREE.Color();
+const _c3 = new THREE.Color();
 const WHITE = new THREE.Color(1, 1, 1);
 const GOLD = new THREE.Color('#ffc94a');
 const RED = new THREE.Color('#ff3b2a');
@@ -261,6 +263,51 @@ export class Vfx {
       this.waves.ground(gp, radius * 3, _c.copy(color).multiplyScalar(0.8), 0.7, 0.8);
       this.dustRing(gp, radius * 1.4, 16, radius * 3);
       this.debris.burst(gp, Math.round(radius * 6), radius * 3.5, 0.18 + radius * 0.03, '#6f6253');
+    }
+  }
+
+  /**
+   * Level-up: a golden column of rising motes and streaks around the fighter, twin ground rings and a chest
+   * shell flash, then a slow drift of sparkles that follows them for a moment.
+   */
+  levelUp(c: Combatant): void {
+    const s = c.char.scale;
+    const feet = _v3.copy(c.pos);
+    const gold = _c3.set('#ffd23a');
+    this.waves.ground(feet, 3.2 * s, _c.copy(gold).multiplyScalar(1.6), 0.7, 1, 0.09);
+    this.later(0.12, () => this.waves.ground(c.pos, 5.5 * s, _c.set('#fff3c0').multiplyScalar(1.2), 0.9, 0.7, 0.05));
+    this.waves.shell(c.chest(_v), 1.6 * s, _c.copy(gold).multiplyScalar(1.4), 0.5, 0.9);
+    this.add.emit({ pos: c.chest(_v), life: 0.35, size: 3.2 * s, size1: 1.2 * s, color: _c.set('#fff6d0').multiplyScalar(2.2), shape: Shape.Glow });
+    const n = Math.round(70 * this.q);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 * 3 + Math.random() * 0.4;
+      const r = (0.55 + Math.random() * 0.5) * s;
+      const p = _v.set(feet.x + Math.cos(a) * r, feet.y + Math.random() * 0.4, feet.z + Math.sin(a) * r);
+      const streak = i % 3 === 0;
+      this.add.emit({
+        pos: p,
+        // Spiral up and slightly inward.
+        vel: _v2.set(-Math.sin(a) * 1.4 - Math.cos(a) * 0.4, 3.5 + Math.random() * 4.5, Math.cos(a) * 1.4 - Math.sin(a) * 0.4),
+        life: 0.8 + Math.random() * 0.7,
+        size: streak ? 0.05 * s : 0.08 * s,
+        size1: 0.01,
+        color: _c.copy(i % 4 === 0 ? WHITE : gold).multiplyScalar(streak ? 3.2 : 2.4),
+        color1: _c2.copy(gold).multiplyScalar(0.8),
+        shape: streak ? Shape.Spark : Shape.Star,
+        stretch: streak ? 0.09 : 0,
+        drag: 0.6,
+        gravity: -0.8,
+        spin: (Math.random() - 0.5) * 8,
+      });
+    }
+    // Lingering sparkles that trail the fighter for ~1.2 s.
+    for (let k = 1; k <= 8; k++) {
+      this.later(k * 0.15, () => {
+        for (let i = 0; i < 4 * this.q; i++) {
+          const p = c.chest(_v).add(_v2.randomDirection().multiplyScalar(0.7 * s));
+          this.add.emit({ pos: p, vel: _v2.set(0, 1 + Math.random(), 0), life: 0.6, size: 0.06 * s, size1: 0.01, color: _c.copy(gold).multiplyScalar(3), shape: Shape.Star, spin: 4 });
+        }
+      });
     }
   }
 

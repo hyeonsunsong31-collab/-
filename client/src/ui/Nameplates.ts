@@ -149,6 +149,7 @@ export class Nameplates {
       p.el.style.transform = `translate(${sx.toFixed(1)}px, ${(sy - 4 - p.lift - p.h).toFixed(1)}px) scale(${k.toFixed(3)})`;
       p.el.style.opacity = String(THREE.MathUtils.clamp((70 - dist) / 20, 0, 1));
       p.el.style.zIndex = String(1000 - Math.round(dist * 10));
+      if (p.nm.textContent !== c.name) p.nm.textContent = c.name;
       const lvText = `Lv ${c.level}`;
       if (p.lv.textContent !== lvText) p.lv.textContent = lvText;
       p.el.classList.toggle('danger', c.team === 'foe' && c.level >= this.playerLevel + 5);

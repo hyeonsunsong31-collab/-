@@ -70,6 +70,33 @@ export function ultimateShot(hero: Combatant, target: Combatant | null): Cinemat
   };
 }
 
+/**
+ * Status-screen portrait: a slow drifting three-quarter front view with the fighter framed on the right third of the
+ * screen (the menu panel owns the left). Runs until stopped.
+ */
+export function portraitShot(hero: Combatant, side: 1 | -1 = 1): CinematicShot {
+  const right = new THREE.Vector3();
+  const shot: CinematicShot = {
+    dur: 3600,
+    blendIn: 0.55,
+    blendOut: 0.45,
+    frame(u, out) {
+      // `dur` shrinks when the shot is released, so derive time from the live value.
+      const t = u * shot.dur;
+      const chest = hero.chest(new THREE.Vector3());
+      const s = hero.char.scale;
+      orbit(hero, side * (0.42 + Math.sin(t * 0.21) * 0.1), 3.3 * s, 1.05 + Math.sin(t * 0.13) * 0.06, out.pos);
+      right.subVectors(chest, out.pos).setY(0).normalize();
+      right.set(-right.z, 0, right.x);
+      // Shift the aim left of the fighter so they sit on the right of the frame.
+      out.look.copy(chest).addScaledVector(right, -0.95 * side * s).setY(chest.y - 0.05 * s);
+      out.fov = 40;
+      out.roll = side * 1.5;
+    },
+  };
+  return shot;
+}
+
 /** Chain attack finisher: dynamic angle sweeping around attacker and target. */
 export function chainShot(att: Combatant, target: Combatant, dur: number, style: 'rush' | 'meteor' | 'thunder'): CinematicShot {
   return {
