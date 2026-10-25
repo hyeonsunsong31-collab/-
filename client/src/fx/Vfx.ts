@@ -17,11 +17,13 @@ import { Aura } from './Aura.ts';
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _c = new THREE.Color();
+const _c2 = new THREE.Color();
 const WHITE = new THREE.Color(1, 1, 1);
 const GOLD = new THREE.Color('#ffc94a');
 const RED = new THREE.Color('#ff3b2a');
 const KI = new THREE.Color('#3fb2ff');
 const DUST = new THREE.Color('#8b7d66');
+const ASH = new THREE.Color('#3a3430');
 const SMOKE = new THREE.Color('#5a554e');
 const WATER = new THREE.Color('#d8eef8');
 
@@ -82,8 +84,124 @@ export class Vfx {
     this.ghosts.forget(c.char);
   }
 
+  private combat: CombatSystem | null = null;
+
   connect(combat: CombatSystem): void {
+    this.combat = combat;
     combat.on((e) => this.onEvent(e));
+  }
+
+  private static readonly EMBER_BONES = ['head', 'upperChest', 'chest', 'hips', 'upperArmL', 'upperArmR', 'foreArmL', 'foreArmR', 'handL', 'handR', 'thighL', 'thighR', 'shinL', 'shinR'] as const;
+
+  /** Embers and ash peeling off bodies that are burning away after death. */
+  private updateDissolves(dt: number): void {
+    if (!this.combat || dt <= 0) return;
+    for (const c of this.combat.list) {
+      const d = c.dissolve;
+      if (d <= 0 || d >= 1) continue;
+      const ch = c.char;
+      const s = ch.scale;
+      // Ramp up, peak mid-burn, taper as little body is left.
+      const rate = 90 * s * s * Math.sin(Math.PI * Math.min(1, d * 1.15)) * this.q;
+      let n = rate * dt;
+      while (n > 0) {
+        if (n < 1 && Math.random() > n) break;
+        n -= 1;
+        const bones = Vfx.EMBER_BONES;
+        ch.boneWorld(bones[(Math.random() * bones.length) | 0], _v);
+        _v.x += (Math.random() - 0.5) * 0.3 * s;
+        _v.y += (Math.random() - 0.5) * 0.3 * s;
+        _v.z += (Math.random() - 0.5) * 0.3 * s;
+        const hot = Math.random() < 0.35;
+        this.add.emit({
+          pos: _v,
+          vel: _v2.set((Math.random() - 0.5) * 0.8, 0.8 + Math.random() * 1.6, (Math.random() - 0.5) * 0.8),
+          life: 0.6 + Math.random() * 0.9,
+          size: (hot ? 0.05 : 0.035) * s,
+          size1: 0.005,
+          color: _c.copy(ch.dissolveColor).multiplyScalar(hot ? 4 : 2.2),
+          color1: _c2.copy(ch.dissolveColor).multiplyScalar(0.6),
+          shape: hot ? Shape.Star : Shape.Spark,
+          stretch: hot ? 0 : 0.02,
+          drag: 1.2,
+          gravity: -1.2,
+          spin: (Math.random() - 0.5) * 6,
+        });
+        if (Math.random() < 0.18) {
+          this.alpha.emit({
+            pos: _v,
+            vel: _v2.set((Math.random() - 0.5) * 0.4, 0.5 + Math.random() * 0.6, (Math.random() - 0.5) * 0.4),
+            life: 1.1 + Math.random() * 0.8,
+            size: 0.12 * s,
+            size1: 0.45 * s,
+            color: ASH,
+            alpha: 0.28,
+            shape: Shape.Smoke,
+            drag: 1.5,
+          });
+        }
+      }
+    }
+  }
+
+  private runes: { mesh: THREE.Mesh; mat: THREE.ShaderMaterial; t: number; dur: number }[] = [];
+  private runeGeo = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
+
+  /** Warlock rune: a glowing sigil on the ground that brightens and spins faster until it detonates. */
+  rune(pos: THREE.Vector3, dur: number, radius = 3.4): void {
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { uK: { value: 0 }, uT: { value: 0 }, uColor: { value: new THREE.Color('#c04bff') } },
+      vertexShader: /* glsl */ `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+      fragmentShader: /* glsl */ `
+        uniform float uK; uniform float uT; uniform vec3 uColor; varying vec2 vUv;
+        void main() {
+          vec2 p = vUv * 2.0 - 1.0;
+          float r = length(p);
+          float a = atan(p.y, p.x) + uT * (0.6 + uK * 4.0);
+          float ring = exp(-pow((r - 0.92) * 38.0, 2.0)) + exp(-pow((r - 0.74) * 50.0, 2.0)) * 0.8;
+          // Glyph band between the rings: angular ticks.
+          float band = step(0.76, r) * step(r, 0.9);
+          float glyph = band * step(0.55, fract(a * 7.0 / 3.14159)) * step(0.3, fract(a * 21.0 / 3.14159 + 0.2));
+          // Inner star.
+          float star = exp(-pow(abs(sin(a * 2.5 - uT * 2.0)) * r * 6.0 - 0.0, 2.0)) * step(r, 0.72) * 0.35;
+          float fill = (1.0 - smoothstep(0.0, 0.95, r)) * uK * 0.5;
+          float v = (ring + glyph * 0.9 + star + fill) * step(r, 1.0);
+          float pulse = 0.7 + 0.3 * sin(uT * (6.0 + uK * 20.0));
+          vec3 c = uColor * (1.5 + uK * 2.0) * pulse;
+          gl_FragColor = vec4(c * v, v);
+        }`,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      polygonOffset: true,
+      polygonOffsetFactor: -4,
+    });
+    const mesh = new THREE.Mesh(this.runeGeo, mat);
+    mesh.position.copy(pos).setY(pos.y + 0.08);
+    mesh.scale.setScalar(radius);
+    mesh.renderOrder = 14;
+    this.group.add(mesh);
+    this.runes.push({ mesh, mat, t: 0, dur });
+  }
+
+  private updateRunes(dt: number): void {
+    for (let i = this.runes.length - 1; i >= 0; i--) {
+      const r = this.runes[i];
+      r.t += dt;
+      const k = Math.min(1, r.t / r.dur);
+      r.mat.uniforms.uK.value = k;
+      r.mat.uniforms.uT.value = r.t;
+      if (Math.random() < dt * 20 * k) {
+        const a = Math.random() * Math.PI * 2;
+        const rr = Math.random() * r.mesh.scale.x;
+        this.add.emit({ pos: _v.set(r.mesh.position.x + Math.cos(a) * rr, r.mesh.position.y, r.mesh.position.z + Math.sin(a) * rr), vel: _v2.set(0, 3 + Math.random() * 3, 0), life: 0.4, size: 0.05, color: _c.set('#d48bff').multiplyScalar(2.5), shape: Shape.Spark, stretch: 0.06 });
+      }
+      if (r.t >= r.dur) {
+        this.group.remove(r.mesh);
+        r.mat.dispose();
+        this.runes.splice(i, 1);
+      }
+    }
   }
 
   /** Run `fn` after `delay` seconds of game time. */
@@ -457,6 +575,8 @@ export class Vfx {
       }
     }
     for (const t of this.tracked.values()) this.updateHero(t, dt);
+    this.updateRunes(dt);
+    this.updateDissolves(dt);
     this.add.update(dt);
     this.alpha.update(dt);
     this.lightning.update(realDt, camera);

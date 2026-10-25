@@ -22,6 +22,10 @@ export interface Bolt {
   dead: boolean;
   /** Targets that perfect-dodged this bolt (it flies on through them). */
   dodged: Set<Combatant>;
+  /** Steering rate toward the target (1/s). */
+  homing: number;
+  /** Visual style: crackling ki bolt or a slower arcane orb. */
+  kind: 'bolt' | 'orb';
 }
 
 export interface Beam {
@@ -378,21 +382,31 @@ export class CombatSystem {
     return n;
   }
 
-  spawnBolt(owner: Combatant, from: THREE.Vector3, dir: THREE.Vector3, target: Combatant | null, color: THREE.Color, scale = 1): Bolt {
+  spawnBolt(
+    owner: Combatant,
+    from: THREE.Vector3,
+    dir: THREE.Vector3,
+    target: Combatant | null,
+    color: THREE.Color,
+    scale = 1,
+    opts: { speed?: number; defId?: string; homing?: number; life?: number; kind?: 'bolt' | 'orb' } = {},
+  ): Bolt {
     const b: Bolt = {
       owner,
       pos: from.clone(),
       prev: from.clone(),
-      vel: dir.clone().normalize().multiplyScalar(78),
+      vel: dir.clone().normalize().multiplyScalar(opts.speed ?? 78),
       target,
       age: 0,
-      life: 2.2,
+      life: opts.life ?? 2.2,
       radius: 0.45 * scale,
-      def: ATTACKS.ki_bolt,
+      def: ATTACKS[opts.defId ?? 'ki_bolt'],
       color: color.clone(),
       scale,
       dead: false,
       dodged: new Set(),
+      homing: opts.homing ?? 5,
+      kind: opts.kind ?? 'bolt',
     };
     this.bolts.push(b);
     this.emit({ type: 'boltSpawn', bolt: b });
@@ -427,11 +441,49 @@ export class CombatSystem {
 
   update(worldDt: number, playerDt: number): void {
     this.craterCooldown = Math.max(0, this.craterCooldown - worldDt);
+    this.separate(worldDt);
     for (const c of this.list) this.updateMelee(c);
     for (const b of this.bolts) this.updateBolt(b, b.owner === this.player ? playerDt : worldDt);
     for (let i = this.bolts.length - 1; i >= 0; i--) if (this.bolts[i].dead) this.bolts.splice(i, 1);
     for (const b of this.beams) this.updateBeam(b, b.owner === this.player ? playerDt : worldDt);
     for (let i = this.beams.length - 1; i >= 0; i--) if (this.beams[i].dead) this.beams.splice(i, 1);
+  }
+
+  /**
+   * Soft body collision: fighters standing in each other's space are eased apart (mass by size, the player yields
+   * least so a crowd can't shove them around). Dashes and other i-frame moves slip through, like in ZZZ.
+   */
+  private separate(dt: number): void {
+    if (dt <= 0) return;
+    const L = this.list;
+    for (let i = 0; i < L.length; i++) {
+      const a = L[i];
+      if (!a.alive || !a.movable || a.actionWindow('iframes')) continue;
+      for (let j = i + 1; j < L.length; j++) {
+        const b = L[j];
+        if (!b.alive || !b.movable || b.actionWindow('iframes')) continue;
+        const dx = b.pos.x - a.pos.x;
+        const dz = b.pos.z - a.pos.z;
+        const rr = a.radius + b.radius;
+        const d2 = dx * dx + dz * dz;
+        if (d2 >= rr * rr) continue;
+        // Only bodies at roughly the same height collide (flyers pass over).
+        if (Math.abs(b.pos.y - a.pos.y) > Math.min(a.height, b.height) * 0.8) continue;
+        const d = Math.sqrt(d2);
+        const nx = d > 1e-4 ? dx / d : Math.cos(i * 2.4 + j);
+        const nz = d > 1e-4 ? dz / d : Math.sin(i * 2.4 + j);
+        let ma = a.char.scale ** 3 * (a === this.player ? 4 : 1);
+        let mb = b.char.scale ** 3 * (b === this.player ? 4 : 1);
+        if (a.busy) ma *= 2;
+        if (b.busy) mb *= 2;
+        const push = Math.min(rr - d, 6 * dt);
+        const ka = mb / (ma + mb);
+        a.pos.x -= nx * push * ka;
+        a.pos.z -= nz * push * ka;
+        b.pos.x += nx * push * (1 - ka);
+        b.pos.z += nz * push * (1 - ka);
+      }
+    }
   }
 
   private updateMelee(att: Combatant): void {
@@ -495,7 +547,7 @@ export class CombatSystem {
         const speed = b.vel.length();
         const cur = _v2.copy(b.vel).divideScalar(speed);
         if (cur.dot(want) > 0.2) {
-          cur.lerp(want, 1 - Math.exp(-dt * 5)).normalize();
+          cur.lerp(want, 1 - Math.exp(-dt * b.homing)).normalize();
           b.vel.copy(cur).multiplyScalar(speed);
         }
       }

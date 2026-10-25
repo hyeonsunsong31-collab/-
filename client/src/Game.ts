@@ -21,6 +21,10 @@ import { ScreenFx } from './fx/ScreenFx.ts';
 import { Vfx } from './fx/Vfx.ts';
 import { ChainAttack } from './combat/ChainAttack.ts';
 import type { CombatEvent } from './combat/CombatSystem.ts';
+import type { CompiledClip } from './animation/Clip.ts';
+import { Spawner } from './gameplay/Spawner.ts';
+import { Nameplates } from './ui/Nameplates.ts';
+import type { Combatant } from './combat/Combatant.ts';
 import { baseStats, generateRival, type Difficulty, type Stats } from '@ak/shared';
 
 export type BootProgress = (frac: number, msg: string) => Promise<void>;
@@ -41,6 +45,11 @@ export class Game {
   screenFx!: ScreenFx;
   vfx!: Vfx;
   chain!: ChainAttack;
+  spawner!: Spawner;
+  nameplates!: Nameplates;
+  clips!: Map<string, CompiledClip>;
+  /** Called when the player defeats a foe (progression hooks in here). */
+  onKill: ((foe: Combatant) => void) | null = null;
   /** Non-player heroes (rival bots). */
   readonly bots: { hero: Hero; ai: RivalAI }[] = [];
   ready = false;
@@ -102,7 +111,8 @@ export class Game {
     this.input = new Input(this.canvas);
     this.camRig = new CameraRig(this.camera, this.world);
     this.combat = new CombatSystem(this.clock, this.world);
-    const hero = new Character(HERO_LOOK, this.lighting, clipLibrary());
+    this.clips = clipLibrary();
+    const hero = new Character(HERO_LOOK, this.lighting, this.clips);
     this.player = new Player(hero, this.world, baseStats(), 1, this.input, this.camRig);
     this.combat.add(this.player);
     this.combat.player = this.player;
@@ -113,6 +123,17 @@ export class Game {
     this.vfx.track(this.player, true);
     this.scene.add(this.vfx.group);
     this.chain = new ChainAttack(this.clock, this.combat, this.camRig, this.input);
+    this.nameplates = new Nameplates();
+    this.nameplates.add(this.player, true);
+    this.spawner = new Spawner(this.scene, this.lighting, this.world, this.combat, this.clips);
+    this.spawner.onSpawn = (m) => {
+      this.nameplates.add(m);
+      m.onRune = (pos, t) => this.vfx.rune(pos, t);
+    };
+    this.spawner.onDespawn = (m) => {
+      this.nameplates.remove(m);
+      this.vfx.ghosts.forget(m.char);
+    };
     this.scene.add(hero.group);
     const spawn = this.findSpawn(6, 22);
     this.player.teleport(spawn, Math.PI);
@@ -156,6 +177,12 @@ export class Game {
       case 'perfectDodge':
         if (e.who === p) cam.dutch(-5);
         break;
+      case 'flash':
+        this.nameplates.telegraph(e.who, e.color);
+        break;
+      case 'death':
+        if (e.by === p && e.who !== p) this.onKill?.(e.who);
+        break;
     }
   }
 
@@ -163,7 +190,7 @@ export class Game {
   spawnRival(difficulty: Difficulty = 'normal', dist = 9, stats?: Stats, level?: number): Hero {
     const spec = generateRival(this.player.stats, this.player.level, difficulty, Math.floor(Math.random() * 1e9));
     const ctl = new BotControls();
-    const ch = new Character(RIVAL_LOOK, this.lighting, clipLibrary());
+    const ch = new Character(RIVAL_LOOK, this.lighting, this.clips);
     const p = this.player.pos.clone().addScaledVector(this.player.forward(), dist);
     const spot = this.findSpawn(p.x, p.z);
     const hero = new Hero(ch, this.world, spec.name, 'foe', level ?? spec.level, stats ?? spec.stats, ctl);
@@ -175,6 +202,7 @@ export class Game {
     this.scene.add(ch.group);
     this.combat.add(hero);
     this.vfx.track(hero);
+    this.nameplates.add(hero);
     this.bots.push({ hero, ai });
     return hero;
   }
@@ -222,6 +250,7 @@ export class Game {
       this.chain.update(dt, this.clock.playerDt);
       this.player.update(this.clock.playerDt);
       for (const b of this.bots) b.hero.update(this.clock.worldDt);
+      this.spawner.update(this.clock.worldDt, this.player);
       this.combat.update(this.clock.worldDt, this.clock.playerDt);
       this.camRig.update(dt, this.input, this.player.camCtx);
       this.input.endFrame();
@@ -230,6 +259,11 @@ export class Game {
       const charging = pl.power === 'charging' ? 1 : pl.power === 'powerup' ? 0.55 : pl.actionName === 'beam_charge' || pl.actionName === 'heavy_charge' ? 0.4 : 0;
       this.screenFx.update(dt, pl, boosting, charging);
       this.vfx.update(this.clock.worldDt, dt, this.camera);
+    }
+    if (this.playing) {
+      this.camera.updateMatrixWorld();
+      this.nameplates.playerLevel = this.player.level;
+      this.nameplates.update(dt, this.camera, this.chain.active || this.camRig.inCinematic);
     }
     for (const fn of this.onFrame) fn(this);
     this.camera.updateMatrixWorld();

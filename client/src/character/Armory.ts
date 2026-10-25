@@ -148,7 +148,8 @@ export function bracer(s: number, len: number, r: number, color = '#9aa0aa'): TH
 }
 
 export function hood(s: number, color: string): THREE.BufferGeometry {
-  const g = xf(new THREE.SphereGeometry(0.15 * s, 16, 12, -Math.PI * 0.85, Math.PI * 1.7, 0, Math.PI * 0.75), 0, 0.02 * s, -0.015 * s, 0, 0, 0, 1, 1.12, 1.08);
+  // Cowl open at the front (+Z, phi = π/2 in three's sphere parameterisation) so the face shows.
+  const g = xf(new THREE.SphereGeometry(0.15 * s, 18, 12, Math.PI * 0.79, Math.PI * 1.42, 0, Math.PI * 0.72), 0, 0.02 * s, -0.012 * s, 0, 0, 0, 1, 1.12, 1.08);
   const point = xf(new THREE.ConeGeometry(0.07 * s, 0.18 * s, 8), 0, 0.12 * s, -0.12 * s, -1.1);
   return merge([colored(g, color), colored(point, color)]);
 }

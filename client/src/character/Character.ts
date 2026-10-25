@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { buildRig, type RigInstance, type BoneName, BONE_INDEX } from './Rig.ts';
 import { BodyBuilder } from './BodyBuilder.ts';
-import { animeMaterial, outlineMaterial, type AnimeMaterial } from './AnimeMaterial.ts';
+import { animeMaterial, outlineMaterial, type AnimeMaterial, type OutlineUniforms } from './AnimeMaterial.ts';
 import { FaceDrawer, type Expression, type FaceState } from './Face.ts';
 import { buildHair } from './Hair.ts';
 import { SpringChain, solveTwoBone } from './Secondary.ts';
@@ -17,6 +17,8 @@ export interface CharacterUpdateCtx {
   groundAt?: (x: number, z: number) => number;
   /** 0..1 how much foot IK to apply (only when standing on the ground). */
   ik?: number;
+  /** Pull the body down so the lower foot rests on the ground (standing poses authored for other proportions). */
+  autoGround?: boolean;
   /** Ambient wind (world). */
   wind?: THREE.Vector3;
   /** Character world velocity (drives cloth drag). */
@@ -67,7 +69,9 @@ export class Character {
   private lookYaw = 0;
   private lookPitch = 0;
   private lighting: Lighting;
-  private outlineMat: THREE.MeshBasicMaterial;
+  private outlineMat: THREE.MeshBasicMaterial & { userData: { outline: OutlineUniforms } };
+  private gearOutlineMats: (THREE.MeshBasicMaterial & { userData: { outline: OutlineUniforms } })[] = [];
+  private shadowsOff = false;
 
   /** Procedural controls (set by gameplay each frame). */
   lookTarget: THREE.Vector3 | null = null;
@@ -80,6 +84,9 @@ export class Character {
   hitFlash = 0;
   /** Extra hair glow multiplier per form. */
   hairGlow = 0;
+  /** Death dissolve (0 solid → 1 gone); the burn edge uses `dissolveColor`. */
+  dissolve = 0;
+  dissolveColor = new THREE.Color('#ff8a3a');
 
   constructor(look: Look, lighting: Lighting, clips: Map<string, CompiledClip>) {
     this.look = look;
@@ -187,10 +194,12 @@ export class Character {
         break;
       case 'imp':
         b.pants(L.pants, true);
+        b.bareLegs();
         b.boots(L.skin, L.skin);
         break;
       case 'golem':
         b.pants(L.pants, true);
+        b.bareLegs();
         b.boots(L.skin, L.trim);
         break;
       case 'robe':
@@ -209,6 +218,7 @@ export class Character {
     const mat = animeMaterial(this.lighting, { vertexColors: true, key: 'gear' });
     this.gearMats.push(mat);
     const outline = outlineMaterial(0.0055 * s, false);
+    this.gearOutlineMats.push(outline);
     const add = (bone: BoneName, geo: THREE.BufferGeometry, pos: THREE.Vector3, rot = new THREE.Euler(), worldAligned = false) => {
       const mesh = new THREE.Mesh(geo, mat);
       mesh.castShadow = true;
@@ -476,7 +486,7 @@ export class Character {
     this.group.updateMatrixWorld(true);
 
     // Foot IK on uneven ground.
-    if (ctx.groundAt && (ctx.ik ?? 0) > 0) this.footIK(ctx.groundAt, ctx.ik ?? 0);
+    if (ctx.groundAt && (ctx.ik ?? 0) > 0) this.footIK(ctx.groundAt, ctx.ik ?? 0, !!ctx.autoGround);
 
     // Secondary cloth / hair.
     const wind = _v.set(0, 0, 0);
@@ -513,6 +523,7 @@ export class Character {
       u.uGlow.value = (this.hairGlow * 0.9 + this.glow * 0.25) * pulse;
       u.uHitFlash.value = this.hitFlash;
     }
+    this.applyDissolve();
     this.hitFlash = Math.max(0, this.hitFlash - dt * 11);
     // Blink.
     this.blinkTimer -= dt;
@@ -528,7 +539,7 @@ export class Character {
   }
 
   /** Plant feet on uneven ground: lower the pelvis as needed, then two-bone IK each leg. */
-  private footIK(groundAt: (x: number, z: number) => number, weight: number): void {
+  private footIK(groundAt: (x: number, z: number) => number, weight: number, autoGround: boolean): void {
     const by = this.rig.byName;
     const base = this.group.position.y;
     const legs: [THREE.Bone, THREE.Bone, THREE.Bone][] = [
@@ -537,6 +548,9 @@ export class Character {
     ];
     const targets: THREE.Vector3[] = [];
     let drop = 0;
+    let lift = Infinity;
+    const ankleH = this.rig.bindWorld.footL.y;
+    const toeH = this.rig.bindWorld.toeL.y;
     for (const [, , foot] of legs) {
       const a = foot.getWorldPosition(new THREE.Vector3());
       const g = groundAt(a.x, a.z);
@@ -544,7 +558,14 @@ export class Character {
       want.y = a.y + (g - base);
       targets.push(want);
       drop = Math.min(drop, g - base);
+      if (autoGround) {
+        // Height of this foot's sole above the ground (ankle or toe, whichever is lower).
+        const toe = (foot === by.footL ? by.toeL : by.toeR).getWorldPosition(_v2);
+        const sole = Math.min(a.y - ankleH, toe.y - toeH);
+        lift = Math.min(lift, sole - g);
+      }
     }
+    if (autoGround && lift > 0.005 && Number.isFinite(lift)) drop -= Math.min(lift, 0.3 * this.scale);
     drop = Math.max(drop, -0.35 * this.scale);
     if (drop < 0) {
       this.pivot.position.y += drop * weight;
@@ -555,6 +576,29 @@ export class Character {
       // Only push feet up onto higher ground or down into dips the pelvis drop allows.
       solveTwoBone(a, b, c, t, weight);
     });
+  }
+
+  private applyDissolve(): void {
+    // The noise field mostly spans ~0.1..0.95; map progress onto that so the burn uses the whole duration.
+    const d = this.dissolve > 0 ? 0.1 + this.dissolve * 0.88 : 0;
+    const mats = [this.bodyMat, this.faceMat, ...this.gearMats];
+    if (this.hair) mats.push(this.hair.mat);
+    for (const m of mats) {
+      const u = m.userData.anime;
+      u.uDissolve.value = d;
+      u.uDissolveColor.value.copy(this.dissolveColor);
+    }
+    this.outlineMat.userData.outline.uDissolve.value = d;
+    for (const m of this.gearOutlineMats) m.userData.outline.uDissolve.value = d;
+    // Shadow maps don't run the dissolve discard: drop the burning body's shadow instead of leaving a solid one.
+    const off = d > 0.2;
+    if (off !== this.shadowsOff) {
+      this.shadowsOff = off;
+      this.group.traverse((o) => {
+        if ((o as THREE.Mesh).isMesh && o.userData.castShadowBase === undefined) o.userData.castShadowBase = o.castShadow;
+        if ((o as THREE.Mesh).isMesh) o.castShadow = off ? false : !!o.userData.castShadowBase;
+      });
+    }
   }
 
   dispose(): void {

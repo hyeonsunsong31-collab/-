@@ -716,6 +716,45 @@ export class BodyBuilder {
     }
   }
 
+  /** Bare legs from under short trousers down into the boots: knee, calf and shin profile in skin colour. */
+  bareLegs(color = this.look.skin): void {
+    const s = this.s;
+    const H = this.hipY;
+    const P = this.pos;
+    const g = this.g;
+    for (const side of [1, -1] as const) {
+      const L = side === 1 ? 'L' : 'R';
+      const thigh = P[`thigh${L}` as BoneName];
+      const knee = P[`shin${L}` as BoneName];
+      const ankle = P[`foot${L}` as BoneName];
+      const rows: [number, number, number, number][] = [
+        // y, centerX, r, calf (back bulge)
+        [H - 0.26 * s, thigh.x / s, 0.11, 0],
+        [H - 0.36 * s, (thigh.x * 0.6 + knee.x * 0.4) / s, 0.1, 0],
+        [knee.y + 0.05 * s, knee.x / s, 0.083, 0],
+        [knee.y - 0.01 * s, knee.x / s, 0.078, 0.02],
+        [knee.y - 0.09 * s, knee.x / s, 0.084, 0.16],
+        [knee.y - 0.2 * s, (knee.x * 0.6 + ankle.x * 0.4) / s, 0.075, 0.1],
+        [ankle.y + 0.3 * s, ankle.x / s, 0.06, 0.02],
+        [ankle.y + 0.22 * s, ankle.x / s, 0.054, 0],
+      ];
+      // Girth thickens the thigh and calf but the ankle must still fit inside the boot shaft.
+      const rings: Ring[] = rows.map(([y, cx, r, calf], i) => {
+        const k = i < 5 ? g : 1 + (g - 1) * 0.25;
+        return {
+          c: V(side * Math.abs(cx) * s, y, (y < knee.y ? 0.0 : 0.006) * s),
+          u: V(1, 0, 0),
+          v: V(0, 0, 1),
+          ru: r * s * k,
+          rv: r * s * k,
+          rvNeg: r * s * k * (1 + calf),
+          e: 2.0,
+        };
+      });
+      this.tube(rings, 20, 'skin', color, [`thigh${L}` as BoneName, `shin${L}` as BoneName], false, false);
+    }
+  }
+
   /** Leather boots with a shaped foot and strap wraps. */
   boots(color = this.look.boots, wrap = this.look.wrap): void {
     const s = this.s;

@@ -75,6 +75,9 @@ export class Combatant extends Fighter {
   sinceHit = 99;
   /** Dissolve progress after death (0..1), drives removal. */
   dissolve = 0;
+  /** Burn away after death (mobs). Heroes stay down for KO screens and respawns. */
+  dissolveOnDeath = false;
+  private deadHold = 0;
   /** Whether hits on this combatant may push it around at all (training post, bosses mid-ultimate…). */
   movable = true;
   /** Heroes (player, rival) can perfect-dodge; one trigger per dash. */
@@ -196,7 +199,8 @@ export class Combatant extends Fighter {
   applyHit(h: HitInfo, dmg: number, daze: number, res: HitResult): void {
     this.hp = Math.max(0, this.hp - dmg);
     this.sinceHit = 0;
-    this.char.hitFlash = 0.9;
+    // Heroes flash softer (the camera is on them all the time); enemies pop bright on every hit.
+    this.char.hitFlash = this.team === 'hero' ? 0.28 : 0.9;
     this.buffs.remove('momentum');
     if (this.hp <= 0) {
       res.killed = true;
@@ -407,8 +411,13 @@ export class Combatant extends Fighter {
         }
         break;
       case 'dead':
-        if (this.move === 'ground' && this.actionDone) this.dissolve = Math.min(1, this.dissolve + dt * 0.25);
+        // Lie still for a beat, then burn away (ZZZ-style disintegration).
+        if (this.dissolveOnDeath && this.move === 'ground' && this.actionDone) {
+          this.deadHold += dt;
+          if (this.deadHold > 0.6) this.dissolve = Math.min(1, this.dissolve + dt / 1.5);
+        }
         break;
     }
+    this.char.dissolve = this.dissolve;
   }
 }

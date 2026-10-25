@@ -99,16 +99,21 @@ export class ScreenFx {
         // Continuous beam ticks would strobe the screen; they only shake the camera.
         if (e.def.id.endsWith('_tick')) return;
         const tier = e.def.tier;
+        if (e.target === player) {
+          // Taking a hit: a red-edged vignette and a sharp aberration jolt; the big impact layer is reserved
+          // for the player's own strikes so incoming chip damage never whites out the screen.
+          this.vig = Math.max(this.vig, 0.4 + tier * 0.08);
+          this.kickCA(0.35 + tier * 0.1);
+          if (tier >= 4) this.kickRadial(e.point, 0.25);
+          if (e.res.stunned) this.doFlash(0.18, '#ffe9a8');
+          break;
+        }
         if (tier >= 2) this.kickCA(0.18 * tier);
         if (tier >= 3) {
           this.kickRadial(e.point, 0.15 + tier * 0.1);
           this.ripple(e.point, 0.5 + tier * 0.15, 0.5);
         }
-        if (tier >= 4 || (tier >= 3 && e.res.crit)) this.impactFrame(e.target === player ? 1 : 0, e.point);
-        if (e.target === player) {
-          this.vig = Math.max(this.vig, 0.45 + tier * 0.1);
-          this.kickCA(0.5);
-        }
+        if (tier >= 4 || (tier >= 3 && e.res.crit)) this.impactFrame(0, e.point);
         if (e.res.stunned) this.doFlash(0.18, '#ffe9a8');
         break;
       }

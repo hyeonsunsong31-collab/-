@@ -309,6 +309,9 @@ export class Fighter {
 
   /* ------------------------------------------------------------------ animation */
 
+  /** Locomotion clip names (mobs swap in their own idles / gaits). */
+  loco = { idle: 'idle', relaxed: 'idle_relaxed', walk: 'walk', run: 'run', sprint: 'sprint', walkSpeed: 1.6, runSpeed: 5.5 };
+
   /** Choose locomotion blend weights from the movement state. */
   protected driveLocomotion(dt: number, intent: MoveIntent | null, inCombat: boolean): void {
     const A = this.char.animator;
@@ -357,17 +360,27 @@ export class Fighter {
         A.setLocoRate('strafe_left', Math.max(0.6, hv / 3.2));
         A.setLocoRate('strafe_right', Math.max(0.6, hv / 3.2));
       } else {
-        const idleName = inCombat || this.relaxTimer < 6 ? 'idle' : 'idle_relaxed';
+        const L = this.loco;
+        const idleName = inCombat || this.relaxTimer < 6 || L.relaxed === L.idle ? L.idle : L.relaxed;
         if (hv < 0.3 && !inCombat) this.relaxTimer += dt;
         else this.relaxTimer = 0;
         const wWalk = THREE.MathUtils.smoothstep(hv, 0.25, 1.4) * (1 - THREE.MathUtils.smoothstep(hv, 2.5, 4.5));
         const wRun = THREE.MathUtils.smoothstep(hv, 2.5, 4.5) * (1 - THREE.MathUtils.smoothstep(hv, 9, 12));
         const wSprint = THREE.MathUtils.smoothstep(hv, 9, 12);
         const wIdle = Math.max(0, 1 - wWalk - wRun - wSprint);
-        A.setLoco({ [idleName]: wIdle, walk: wWalk, run: wRun, sprint: wSprint }, 0.2);
-        A.setLocoRate('walk', THREE.MathUtils.clamp(hv / 1.6, 0.6, 1.6));
-        A.setLocoRate('run', THREE.MathUtils.clamp(hv / 5.5, 0.7, 1.5));
-        A.setLocoRate('sprint', THREE.MathUtils.clamp(hv / 11, 0.75, 1.4));
+        const w: Record<string, number> = {};
+        const addW = (n: string, v: number) => (w[n] = (w[n] ?? 0) + v);
+        addW(idleName, wIdle);
+        addW(L.walk, wWalk);
+        addW(L.run, wRun);
+        addW(L.sprint, wSprint);
+        A.setLoco(w, 0.2);
+        if (L.walk === L.run) A.setLocoRate(L.walk, THREE.MathUtils.clamp(hv / L.walkSpeed, 0.6, 1.8));
+        else {
+          A.setLocoRate(L.walk, THREE.MathUtils.clamp(hv / L.walkSpeed, 0.6, 1.6));
+          A.setLocoRate(L.run, THREE.MathUtils.clamp(hv / L.runSpeed, 0.7, 1.5));
+        }
+        if (L.sprint !== L.run) A.setLocoRate(L.sprint, THREE.MathUtils.clamp(hv / 11, 0.75, 1.4));
       }
     }
     // Lean into turns and acceleration (degrees of root roll/pitch).
@@ -396,6 +409,7 @@ export class Fighter {
     this.char.update(dt, {
       groundAt: standing ? (x, z) => Math.max(this.world.groundAt(x, z, this.pos.y + 0.6), WATER_LEVEL - 0.02) : undefined,
       ik: standing ? 1 : 0,
+      autoGround: standing && Math.hypot(this.vel.x, this.vel.z) < 1.2,
       velocity: this.vel,
       wind: _v.set(1.2, 0, 0.7),
     });

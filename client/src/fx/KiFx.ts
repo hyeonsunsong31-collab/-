@@ -190,7 +190,8 @@ export class KiFx {
     this.group.add(capsule);
     const tendrils: LBolt[] = [];
     const paths: THREE.Vector3[][] = [];
-    for (let i = 0; i < 3; i++) {
+    // Arcane orbs swirl instead of crackling.
+    for (let i = 0; i < (b.kind === 'orb' ? 0 : 3); i++) {
       const path = Array.from({ length: 10 }, () => b.pos.clone());
       paths.push(path);
       tendrils.push(
@@ -335,6 +336,24 @@ export class KiFx {
       }
       v.t += dt;
       const dir = _v.copy(b.vel).normalize();
+      if (b.kind === 'orb') {
+        // Arcane orb: a pulsing sphere with wisps peeling off and a smoky violet wake.
+        const pulse = 1 + Math.sin(this.t * 22 + v.phase) * 0.15;
+        v.mat.uniforms.uA.value.copy(b.pos).addScaledVector(dir, -0.25 * b.scale);
+        v.mat.uniforms.uB.value.copy(b.pos);
+        v.mat.uniforms.uT.value = this.t;
+        v.mat.uniforms.uLenU.value = 1.4;
+        this.add.emit({ pos: b.pos, life: 0.06, size: 1.3 * b.scale * pulse, color: _c.copy(b.color).multiplyScalar(2), shape: Shape.Glow });
+        if (Math.random() < 0.9 * this.quality) {
+          const off = _v2.randomDirection().multiplyScalar(0.35 * b.scale);
+          this.add.emit({ pos: _u.copy(b.pos).add(off), vel: off.multiplyScalar(4).addScaledVector(dir, -4), life: 0.45, size: 0.22 * b.scale, size1: 0.02, color: _c.copy(b.color).multiplyScalar(1.6), shape: Shape.Flame, fadeIn: 0.1 });
+        }
+        if (v.lastTrail.distanceToSquared(b.pos) > 0.4) {
+          this.alpha.emit({ pos: b.pos, vel: _v2.randomDirection().multiplyScalar(0.3), life: 0.7, size: 0.35 * b.scale, size1: 0.9 * b.scale, color: _c.set('#2a1838'), alpha: 0.35, shape: Shape.Smoke, drag: 2 });
+          v.lastTrail.copy(b.pos);
+        }
+        continue;
+      }
       const len = Math.min(2.4 * b.scale, 0.3 + v.t * 40);
       const tail = _v2.copy(b.pos).addScaledVector(dir, -len);
       v.mat.uniforms.uA.value.copy(tail);

@@ -1,0 +1,156 @@
+/* Floating nameplates: name, level, scouter power level, HP (with damage ghost) and Daze. */
+.ak-np-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+  overflow: hidden;
+}
+.ak-np {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 150px;
+  margin-left: -75px;
+  transform-origin: 50% 100%;
+  will-change: transform, opacity;
+  font-family: var(--ak-font-ui);
+  color: var(--ak-paper);
+  text-shadow: 0 1px 0 #000, 0 0 3px #000;
+  transition: opacity 0.18s;
+}
+.ak-np-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.ak-np .lv {
+  font-family: var(--ak-font-display);
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  padding: 0 5px;
+  background: var(--ak-ink);
+  color: var(--ak-gold);
+  transform: skewX(-12deg);
+}
+.ak-np.danger .lv {
+  color: var(--ak-red);
+}
+.ak-np .nm {
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+.ak-np-pl {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: 4px;
+  margin: 1px 0 2px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ak-scouter);
+  text-shadow: 0 0 6px rgba(93, 255, 122, 0.85), 0 1px 0 #000;
+}
+.ak-np-pl .t {
+  font-size: 10px;
+  opacity: 0.8;
+}
+.ak-np-pl .v {
+  font-size: 14px;
+  letter-spacing: 0.04em;
+}
+.ak-np.spike .ak-np-pl .v {
+  animation: ak-np-spike 0.6s ease-out;
+}
+.ak-np-bar {
+  position: relative;
+  height: 6px;
+  margin: 0 8px;
+  background: rgba(0, 0, 0, 0.72);
+  border: 1.5px solid var(--ak-ink);
+  transform: skewX(-20deg);
+  overflow: hidden;
+}
+.ak-np-bar i {
+  position: absolute;
+  inset: 0;
+  transform-origin: left;
+}
+.ak-np-bar .ghost {
+  background: #fff1c4;
+  transition: transform 0.45s 0.25s ease-in;
+}
+.ak-np-bar .fill {
+  background: linear-gradient(180deg, #ff6a55, #d61f1f);
+}
+.ak-np.ally .ak-np-bar .fill {
+  background: linear-gradient(180deg, #7dffa0, #22b34f);
+}
+.ak-np-daze {
+  height: 3px;
+  margin: 2px 14px 0;
+}
+.ak-np-daze .fill {
+  background: linear-gradient(90deg, #ffb12a, #ffe14a);
+}
+.ak-np.stunned .ak-np-daze .fill {
+  background: #fff;
+  animation: ak-np-flash 0.25s steps(2) infinite;
+}
+.ak-np .stun {
+  display: none;
+  position: absolute;
+  left: 50%;
+  top: -18px;
+  transform: translateX(-50%) skewX(-12deg);
+  padding: 0 6px;
+  font-family: var(--ak-font-display);
+  font-size: 14px;
+  background: var(--ak-gold);
+  color: var(--ak-ink);
+  text-shadow: none;
+}
+.ak-np.stunned .stun {
+  display: block;
+}
+.ak-np .flash {
+  position: absolute;
+  left: 50%;
+  top: -34px;
+  width: 26px;
+  height: 26px;
+  margin-left: -13px;
+  opacity: 0;
+  background: radial-gradient(circle, #fff 0 18%, var(--fc, #ffc21a) 30%, transparent 70%);
+  filter: drop-shadow(0 0 6px var(--fc, #ffc21a));
+}
+.ak-np.telegraph .flash {
+  animation: ak-np-tele 0.3s ease-out;
+}
+@keyframes ak-np-spike {
+  0% {
+    color: #fff;
+    transform: scale(1.6);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes ak-np-flash {
+  50% {
+    background: var(--ak-gold);
+  }
+}
+@keyframes ak-np-tele {
+  0% {
+    opacity: 1;
+    transform: scale(0.4) rotate(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.6) rotate(45deg);
+  }
+}

@@ -99,6 +99,29 @@ export const ATTACKS: Record<string, AttackDef> = {
   chain_thunder: A({ id: 'chain_thunder', mult: 2.8, daze: 22, kind: 'knockdown', limb: 'body', reach: 0, knock: 12, lift: 7, hitstop: 0.16, shake: 0.85, energy: 2, ki: true, heavy: true, tier: 4, crater: 4, poise: 3 }),
 };
 
+/* ------------------------------------------------------------------ mobs */
+
+export const MOB_ATTACKS: Record<string, AttackDef> = {
+  brig_slash: A({ id: 'brig_slash', mult: 0.9, daze: 0, kind: 'light', limb: 'handR', reach: 2.6, arc: 85, knock: 2.5, hitstop: 0.06, shake: 0.25, energy: 0, flash: 'gold', tier: 2 }),
+  brig_backhand: A({ id: 'brig_backhand', mult: 0.8, daze: 0, kind: 'light', limb: 'handR', reach: 2.6, arc: 95, knock: 2.5, hitstop: 0.06, shake: 0.22, energy: 0, tier: 2 }),
+  brig_overhead: A({ id: 'brig_overhead', mult: 1.8, daze: 0, kind: 'knockdown', limb: 'both', reach: 2.9, arc: 50, knock: 6, lift: 3, hitstop: 0.11, shake: 0.55, energy: 0, flash: 'red', tier: 3, crater: 1.4, poise: 2 }),
+  brig_kick: A({ id: 'brig_kick', mult: 0.6, daze: 0, kind: 'heavy', limb: 'footR', reach: 2.2, arc: 60, knock: 5, hitstop: 0.06, shake: 0.2, energy: 0, tier: 1 }),
+  knight_slash: A({ id: 'knight_slash', mult: 1.0, daze: 0, kind: 'light', limb: 'handR', reach: 2.9, arc: 90, knock: 2.5, hitstop: 0.06, shake: 0.25, energy: 0, flash: 'gold', tier: 2 }),
+  knight_rising: A({ id: 'knight_rising', mult: 1.1, daze: 0, kind: 'launch', limb: 'handR', reach: 2.8, arc: 70, knock: 2, lift: 8, hitstop: 0.08, shake: 0.3, energy: 0, flash: 'gold', tier: 2 }),
+  knight_thrust: A({ id: 'knight_thrust', mult: 1.6, daze: 0, kind: 'heavy', limb: 'handR', reach: 3.8, arc: 22, knock: 7, hitstop: 0.1, shake: 0.4, energy: 0, flash: 'red', tier: 3 }),
+  knight_bash: A({ id: 'knight_bash', mult: 0.7, daze: 0, kind: 'heavy', limb: 'handL', reach: 2.3, arc: 70, knock: 8, hitstop: 0.09, shake: 0.35, energy: 0, flash: 'gold', tier: 2 }),
+  imp_claw: A({ id: 'imp_claw', mult: 0.55, daze: 0, kind: 'light', limb: 'handL', reach: 1.9, arc: 80, yMax: 1.8, knock: 1.4, hitstop: 0.04, shake: 0.12, energy: 0, tier: 1 }),
+  imp_claw2: A({ id: 'imp_claw2', mult: 0.55, daze: 0, kind: 'light', limb: 'handR', reach: 1.9, arc: 80, yMax: 1.8, knock: 1.8, hitstop: 0.04, shake: 0.12, energy: 0, tier: 1 }),
+  imp_leap: A({ id: 'imp_leap', mult: 1.1, daze: 0, kind: 'heavy', limb: 'both', reach: 2.0, arc: 90, yMin: -1.5, yMax: 2.5, knock: 5, hitstop: 0.08, shake: 0.3, energy: 0, flash: 'gold', tier: 2 }),
+  imp_blast: A({ id: 'imp_blast', mult: 2.4, daze: 0, kind: 'knockdown', limb: 'body', reach: 3.6, arc: 180, yMin: -2, yMax: 3, knock: 12, lift: 6, hitstop: 0.1, shake: 0.6, energy: 0, flash: 'red', tier: 3, crater: 2.4, poise: 3 }),
+  golem_slam: A({ id: 'golem_slam', mult: 2.6, daze: 0, kind: 'knockdown', limb: 'both', reach: 4.8, arc: 55, yMax: 4, knock: 10, lift: 6, hitstop: 0.14, shake: 0.85, energy: 0, flash: 'red', tier: 4, crater: 3.2, poise: 3 }),
+  golem_quake: A({ id: 'golem_quake', mult: 1.2, daze: 0, kind: 'launch', limb: 'body', reach: 0, arc: 180, yMin: -1, yMax: 0.8, knock: 6, lift: 7, hitstop: 0.06, shake: 0.6, energy: 0, flash: 'red', tier: 3, poise: 3 }),
+  golem_swipe: A({ id: 'golem_swipe', mult: 2.0, daze: 0, kind: 'knockdown', limb: 'handR', reach: 4.6, arc: 120, yMax: 4, knock: 15, lift: 4, hitstop: 0.12, shake: 0.7, energy: 0, flash: 'gold', tier: 3, poise: 3 }),
+  warlock_orb: A({ id: 'warlock_orb', mult: 0.9, daze: 0, kind: 'heavy', limb: 'body', reach: 0, knock: 4, hitstop: 0.05, shake: 0.25, energy: 0, ki: true, tier: 2 }),
+  warlock_rune: A({ id: 'warlock_rune', mult: 1.7, daze: 0, kind: 'launch', limb: 'body', reach: 0, arc: 180, yMin: -1, yMax: 3, knock: 4, lift: 10, hitstop: 0.1, shake: 0.5, energy: 0, ki: true, flash: 'red', tier: 3, crater: 2.2, poise: 3 }),
+};
+Object.assign(ATTACKS, MOB_ATTACKS);
+
 /** Light-combo chain on the ground and in the air. */
 export const GROUND_CHAIN = ['light1', 'light2', 'light3', 'light4', 'light5'] as const;
 export const AIR_CHAIN = ['air1', 'air2', 'air3', 'air4'] as const;
