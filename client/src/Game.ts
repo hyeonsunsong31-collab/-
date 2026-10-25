@@ -38,6 +38,7 @@ import type { Settings } from './core/Settings.ts';
 import { isTouchDevice } from './render/Quality.ts';
 import { titleShot } from './camera/Shots.ts';
 import { POIS } from './world/layout.ts';
+import { GameAudio } from './audio/GameAudio.ts';
 import { COMBAT, nextForm } from '@ak/shared';
 import { STAT_KEYS, basePowerLevel, cloneStats, generateRival, type BotSpec, type Difficulty, type Profile, type Stats } from '@ak/shared';
 
@@ -73,6 +74,7 @@ export class Game {
   settingsPanel!: SettingsPanel;
   controlsPanel!: ControlsPanel;
   defeat!: DefeatScreen;
+  audio!: GameAudio;
   /** The title screen owns the camera and the fighter. */
   inTitle = false;
   private captures = new Set<string>();
@@ -249,9 +251,10 @@ export class Game {
       this.hud.onCombat(e, this.player);
       if (e.type === 'hit' && (e.attacker === this.player || e.target === this.player)) this.touch.vibrate(e.target === this.player ? 35 : e.def.tier >= 3 ? 18 : 8);
     });
-    this.player.fxHook = (name) => {
+    this.player.fxHooks.push((name) => {
       if (name === 'transformBurst') this.hud.formCard(this.player.form);
-    };
+    });
+    this.audio = new GameAudio(this);
     // Menus.
     this.pause.onResume = () => this.setPause(false);
     this.pause.onStatus = () => {
@@ -585,6 +588,7 @@ export class Game {
       const arenaMenu = this.arena.phase === 'select' || this.arena.phase === 'result' || this.arena.phase === 'loading';
       this.nameplates.update(dt, this.camera, this.inTitle || this.chain.active || this.camRig.inCinematic || arenaMenu || this.pause.isOpen || this.map.isOpen);
       this.updateInterface(dt);
+      this.audio.update(dt);
     }
     for (const fn of this.onFrame) fn(this);
     this.camera.updateMatrixWorld();

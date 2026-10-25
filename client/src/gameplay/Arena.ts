@@ -45,6 +45,8 @@ export class Arena {
   readonly ui: ArenaUI;
   readonly prompt: InteractPrompt;
   readonly heralds: Npc[] = [];
+  /** Outcome of the last finished bout (for presentation). */
+  lastOutcome: 'win' | 'loss' | null = null;
   private talkTo: Npc | null = null;
 
   constructor(private g: Game) {
@@ -258,6 +260,7 @@ export class Arena {
     const g = this.g;
     const info = this.finishInfo!;
     const outcome = info.loser === this.rival ? 'win' : 'loss';
+    this.lastOutcome = outcome;
     const before = { ...g.save.profile };
     const plFrom = basePowerLevel(before.stats);
     const levels = this.ticket ? await g.save.finishMatch(this.ticket, outcome) : 0;

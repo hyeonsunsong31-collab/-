@@ -123,12 +123,12 @@ export class Hero extends Combatant {
   /** Presentation hook (camera kicks, sounds); `fx` also publishes on the combat bus. */
   protected onFx(_name: string, _data?: Record<string, unknown>): void {}
 
-  /** Outside listener for presentation beats (HUD title cards, audio). */
-  fxHook: ((name: string, data?: Record<string, unknown>) => void) | null = null;
+  /** Outside listeners for presentation beats (HUD title cards, audio). */
+  readonly fxHooks: ((name: string, data?: Record<string, unknown>) => void)[] = [];
 
   protected fx(name: string, data?: Record<string, unknown>): void {
     this.onFx(name, data);
-    this.fxHook?.(name, data);
+    for (const fn of this.fxHooks) fn(name, data);
     this.combat?.emit({ type: 'anim', who: this, name, data });
   }
 
