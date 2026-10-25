@@ -5,6 +5,7 @@ import { LOCOMOTION } from './locomotion.ts';
 import { COMBAT } from './combat.ts';
 import { SPECIAL } from './special.ts';
 import { MOBS } from './mobs.ts';
+import { NPC } from './npc.ts';
 
 export const BASE_CLIPS: ClipDef[] = [
   { name: 'tpose', dur: 1, keys: [{ t: 0, p: P({}) }] },
@@ -36,7 +37,7 @@ export const BASE_CLIPS: ClipDef[] = [
 let compiled: Map<string, CompiledClip> | null = null;
 
 export function allClipDefs(): ClipDef[] {
-  return [...BASE_CLIPS, ...LOCOMOTION, ...COMBAT, ...SPECIAL, ...MOBS];
+  return [...BASE_CLIPS, ...LOCOMOTION, ...COMBAT, ...SPECIAL, ...MOBS, ...NPC];
 }
 
 export function clipLibrary(): Map<string, CompiledClip> {

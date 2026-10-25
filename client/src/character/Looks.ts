@@ -70,6 +70,28 @@ export const RIVAL_LOOK: Look = {
   scar: true,
 };
 
+/** Arena herald: a tournament crier in the lord's blue and gold. */
+export const HERALD_LOOK: Look = {
+  ...HERO_LOOK,
+  id: 'herald',
+  proportions: { ...HERO_PROPORTIONS, height: 1.8, muscle: 0.86, girth: 1.0, shoulder: 0.95 },
+  skin: '#e2b08c',
+  outfit: 'gi',
+  top: '#1f3f86',
+  trim: '#e4b53a',
+  pants: '#2a2b38',
+  sash: '#e4b53a',
+  boots: '#3a2516',
+  wrap: '#1f3f86',
+  bands: '#e4b53a',
+  hairStyle: 7,
+  hairColor: '#5a3a22',
+  eyeColor: '#2a3b5a',
+  browColor: '#5a3a22',
+  weapon: 'none',
+  sleeveless: false,
+};
+
 export const BRIGAND_LOOK: Look = {
   ...HERO_LOOK,
   id: 'brigand',

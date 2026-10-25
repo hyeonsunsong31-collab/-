@@ -167,6 +167,26 @@ export class Combatant extends Fighter {
     return this.derived.moveSpeed * this.form.speedMult * (1 + this.buffs.total('moveSpdPct'));
   }
 
+  /** Back on their feet at full health (arena rounds, respawn). */
+  revive(): void {
+    this.state = 'normal';
+    this.hp = this.maxHp;
+    this.daze = 0;
+    this.stunTimer = 0;
+    this.guard = COMBAT.guardMax;
+    this.guarding = false;
+    this.dissolve = 0;
+    this.deadHold = 0;
+    this.char.dissolve = 0;
+    this.knock.set(0, 0, 0);
+    this.vel.set(0, 0, 0);
+    this.flash = null;
+    this.sinceHit = 99;
+    this.invulnTimer = 0.6;
+    if (this.move !== 'ground') this.move = 'air';
+    this.stopAction(0.2);
+  }
+
   startFlash(color: 'gold' | 'red', lead: number = COMBAT.flashLead): void {
     this.flash = color;
     this.flashTimer = lead;

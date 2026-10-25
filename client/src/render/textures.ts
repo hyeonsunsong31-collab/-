@@ -276,6 +276,139 @@ export function woodTexture(dark = true): PbrSet {
   return set;
 }
 
+/**
+ * Tournament-stage flagstones: a 4×4 field of big limestone slabs (one texture = 10 m) with bevelled edges, dusty
+ * grout, per-slab tint, mottling and grain, chipped corners, hairline cracks and a polished wear sheen in the
+ * middle where fighters stand.
+ */
+export function flagstoneTexture(): PbrSet {
+  const key = 'flagstone';
+  if (cache.has(key)) return cache.get(key)!;
+  const S = 1024;
+  const N = 4;
+  const C = S / N;
+  const GAP = 3;
+  const BEVEL = 9;
+  const n = new Noise(77);
+  const rng = new Rng(77);
+  const [c, ctx] = canvas(S, S);
+  const [hc, hctx] = canvas(S, S);
+  const col = new Float32Array(S * S * 3);
+  const hgt = new Float32Array(S * S);
+  // Per-slab tints.
+  const tints: [number, number, number][] = [];
+  for (let i = 0; i < N * N; i++) {
+    const k = rng.range(0.8, 1.06);
+    const warm = rng.range(-0.05, 0.05);
+    tints.push([k * (1 + warm), k, k * (1 - warm * 1.4)]);
+  }
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const cx = Math.floor(x / C);
+      const cy = Math.floor(y / C);
+      const lx = x - cx * C;
+      const ly = y - cy * C;
+      // Distance to the slab's own edge (grout sits in the GAP band shared with neighbours).
+      const edge = Math.min(lx, ly, C - 1 - lx, C - 1 - ly) - GAP;
+      const t = tints[cy * N + cx];
+      const mott = tile(n, x, y, S, S, 3.2) * 0.11 + tile(n, x + 300, y + 900, S, S, 11) * 0.06 + tile(n, x + 700, y + 200, S, S, 26) * 0.03;
+      const grain = (rng.next() - 0.5) * 0.06;
+      // Foot-traffic polish toward each slab's middle and the stage centre.
+      const mid = 1 - Math.min(1, Math.hypot(lx - C / 2, ly - C / 2) / (C * 0.75));
+      let r = 158 * t[0] * (1 + mott + grain + mid * 0.03);
+      let g = 149 * t[1] * (1 + mott + grain + mid * 0.03);
+      let b = 132 * t[2] * (1 + mott + grain + mid * 0.025);
+      let h = 0.78 + mott * 0.6;
+      if (edge < 0) {
+        // Grout: dusty dark sand between slabs.
+        const d = 0.55 + tile(n, x * 3, y * 3, S, S, 20) * 0.1;
+        r = 98 * d + 20;
+        g = 90 * d + 18;
+        b = 76 * d + 14;
+        h = 0.12;
+      } else if (edge < BEVEL) {
+        // Rounded, slightly darker worn edge.
+        const k = edge / BEVEL;
+        const ease = Math.sin((k * Math.PI) / 2);
+        h = 0.2 + (h - 0.2) * ease;
+        const dk = 0.78 + 0.22 * ease;
+        r *= dk;
+        g *= dk;
+        b *= dk;
+      }
+      // Speckles.
+      if (edge >= 0 && rng.next() < 0.004) {
+        r *= 0.72;
+        g *= 0.72;
+        b *= 0.72;
+        h -= 0.05;
+      }
+      const i = y * S + x;
+      col[i * 3] = r;
+      col[i * 3 + 1] = g;
+      col[i * 3 + 2] = b;
+      hgt[i] = h;
+    }
+  }
+  // Chipped corners and hairline cracks.
+  const dent = (px: number, py: number, rad: number, depth: number, dark: number) => {
+    for (let y = Math.floor(py - rad); y <= py + rad; y++)
+      for (let x = Math.floor(px - rad); x <= px + rad; x++) {
+        const d = Math.hypot(x - px, y - py) / rad;
+        if (d > 1) continue;
+        const xx = ((x % S) + S) % S;
+        const yy = ((y % S) + S) % S;
+        const i = yy * S + xx;
+        const k = (1 - d) * (1 - d);
+        hgt[i] -= depth * k;
+        col[i * 3] *= 1 - dark * k;
+        col[i * 3 + 1] *= 1 - dark * k;
+        col[i * 3 + 2] *= 1 - dark * k;
+      }
+  };
+  for (let cy = 0; cy < N; cy++)
+    for (let cx = 0; cx < N; cx++) {
+      for (let k = 0; k < 4; k++) {
+        if (rng.next() > 0.45) continue;
+        const ox = k % 2 ? C - GAP - 4 : GAP + 4;
+        const oy = k > 1 ? C - GAP - 4 : GAP + 4;
+        dent(cx * C + ox + rng.range(-3, 3), cy * C + oy + rng.range(-3, 3), rng.range(6, 15), 0.35, 0.22);
+      }
+      const cracks = rng.next() < 0.55 ? 1 + (rng.next() < 0.3 ? 1 : 0) : 0;
+      for (let k = 0; k < cracks; k++) {
+        let x = cx * C + rng.range(20, C - 20);
+        let y = cy * C + rng.range(20, C - 20);
+        let a = rng.range(0, Math.PI * 2);
+        const len = rng.range(40, 140);
+        for (let s = 0; s < len; s++) {
+          a += rng.range(-0.35, 0.35);
+          x += Math.cos(a);
+          y += Math.sin(a);
+          const lx = x - cx * C;
+          const ly = y - cy * C;
+          if (lx < GAP + 2 || ly < GAP + 2 || lx > C - GAP - 2 || ly > C - GAP - 2) break;
+          dent(x, y, 1.6, 0.25, 0.32);
+        }
+      }
+    }
+  const img = ctx.createImageData(S, S);
+  const himg = hctx.createImageData(S, S);
+  for (let i = 0; i < S * S; i++) {
+    img.data[i * 4] = Math.max(0, Math.min(255, col[i * 3]));
+    img.data[i * 4 + 1] = Math.max(0, Math.min(255, col[i * 3 + 1]));
+    img.data[i * 4 + 2] = Math.max(0, Math.min(255, col[i * 3 + 2]));
+    img.data[i * 4 + 3] = 255;
+    const hv = Math.max(0, Math.min(255, hgt[i] * 255));
+    himg.data[i * 4] = himg.data[i * 4 + 1] = himg.data[i * 4 + 2] = hv;
+    himg.data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  hctx.putImageData(himg, 0, 0);
+  const set = { map: toTexture(c), normalMap: normalFromHeight(hc, 3.5) };
+  cache.set(key, set);
+  return set;
+}
+
 export function stoneWallTexture(): PbrSet {
   const key = 'stonewall';
   if (cache.has(key)) return cache.get(key)!;

@@ -14,6 +14,7 @@ import {
   bannerTexture,
   clothTexture,
   rockTexture,
+  flagstoneTexture,
 } from '../render/textures.ts';
 import { windUniforms } from './Grass.ts';
 
@@ -80,6 +81,7 @@ export class Settlements {
     const tl = roofTileTexture();
     const sl = slateTexture();
     const rk = rockTexture();
+    const fl = flagstoneTexture();
     return {
       plaster: std({ map: pl.map, normalMap: pl.normalMap, roughness: 0.92 }, 'plaster'),
       timber: std({ map: wd.map, normalMap: wd.normalMap, roughness: 0.85 }, 'timber'),
@@ -97,6 +99,7 @@ export class Settlements {
       hay: std({ map: th.map, normalMap: th.normalMap, roughness: 1, color: '#e6cf86' }, 'hay'),
       gold: std({ color: '#c99a2e', roughness: 0.35, metalness: 0.9 }, 'gold'),
       sand: std({ color: '#cdb98d', roughness: 1, map: rk.map }, 'sand'),
+      flag: std({ map: fl.map, normalMap: fl.normalMap, roughness: 0.78 }, 'flag'),
     };
   }
 
@@ -543,13 +546,15 @@ export class Settlements {
     // Fighting stage: raised square of stone tiles (ring-out outside).
     const half = 15;
     gb.box('stone', half * 2 + 1.2, 1.4, half * 2 + 1.2, 0, 0.2, 0, 0, 0, 0, 0.25);
-    gb.box('rough', half * 2, 0.2, half * 2, 0, 0.98, 0, 0, 0, 0, 0.18);
-    for (let i = -half; i <= half; i += 2.5) {
-      gb.box('stone', 0.05, 0.02, half * 2, i, 1.09, 0);
-      gb.box('stone', half * 2, 0.02, 0.05, 0, 1.09, i);
+    // Flagstone surface: one texture repeat = 10 m = 4×4 slabs of 2.5 m, aligned with the stage edges.
+    gb.box('flag', half * 2, 0.2, half * 2, 0, 0.98, 0, 0, 0, 0, 0.1);
+    // The stage is solid ground to stand on; falling off it onto the sand is a ring-out.
+    gb.colliderBox(0, 0, half + 0.6, half + 0.6, -0.6, 1.08);
+    // Steps up to the stage (each rise is low enough to walk up).
+    for (let s = 0; s < 3; s++) {
+      gb.box('stone', 6, 0.35, 1.0, 0, 0.17 + s * 0.3, half + 1.6 - s * 0.5);
+      gb.colliderBox(0, half + 1.6 - s * 0.5, 3, 0.5, -0.6, 0.345 + s * 0.3);
     }
-    // Steps up to the stage.
-    for (let s = 0; s < 3; s++) gb.box('stone', 6, 0.35, 1.0, 0, 0.17 + s * 0.3, half + 1.6 - s * 0.5);
     // Sand floor of the arena bowl.
     gb.cylinder('sand', R - 6, R - 6, 0.15, 0, -0.02, 0, 48);
     // Tiered stands (rings of steps).

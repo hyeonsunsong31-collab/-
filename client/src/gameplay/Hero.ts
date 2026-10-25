@@ -205,7 +205,9 @@ export class Hero extends Combatant {
   private buildIntent(): MoveIntent {
     const c = this.controls;
     const it = this.intent;
-    it.dir.copy(c.move);
+    // Scripted sequences (chain finishers, arena intros) own the fighter: no stick movement.
+    if (this.scripted) it.dir.set(0, 0, 0);
+    else it.dir.copy(c.move);
     const moving = it.dir.lengthSq() > 0.01;
     if (!moving) this.dashSprint = false;
     it.sprint = moving && (c.sprint || this.dashSprint);
@@ -622,6 +624,19 @@ export class Hero extends Combatant {
     this.heavyHeld = false;
     this.kiHeld = false;
     this.char.tremble = 0;
+  }
+
+  /** Fresh start for an arena round: base form, empty Energy/Surge, full Ki, no charge/beam/guard in flight. */
+  resetForMatch(): void {
+    this.endChainState();
+    if (this.form.tier > 0) this.setFormTier(0);
+    this.energy = 0;
+    this.surge = 0;
+    this.ki = this.derived.maxKi;
+    this.buffs.clear();
+    this.counterWindow = 0;
+    this.parryWindow = 0;
+    this.target = null;
   }
 
   /** Instantly set a form (debug, arena bot setup). */

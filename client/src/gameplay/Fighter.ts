@@ -17,7 +17,9 @@ export interface MoveIntent {
   faceYaw: number | null;
 }
 
-export const GRAVITY = 28;
+export /** Highest ledge a walking fighter climbs without jumping (m). */
+const STEP_UP = 0.4;
+const GRAVITY = 28;
 export const JUMP_VEL = 11.2;
 
 const _v = new THREE.Vector3();
@@ -243,9 +245,11 @@ export class Fighter {
       this.knock.multiplyScalar(Math.exp(-dt * fr));
     }
 
-    // Collisions with props / buildings / trunks.
+    // Collisions with props / buildings / trunks. Grounded fighters step up anything under knee height
+    // (stairs, stage edges, kerbs); the ground snap below then lifts them onto it.
     const out = { x: 0, z: 0 };
-    if (this.world.colliders.resolve(this.pos.x, this.pos.z, this.radius, this.pos.y, this.height, out)) {
+    const step = this.move === 'ground' ? STEP_UP : 0;
+    if (this.world.colliders.resolve(this.pos.x, this.pos.z, this.radius, this.pos.y + step, this.height - step, out)) {
       this.pos.x = out.x;
       this.pos.z = out.z;
     }

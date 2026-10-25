@@ -97,6 +97,71 @@ export function portraitShot(hero: Combatant, side: 1 | -1 = 1): CinematicShot {
   return shot;
 }
 
+/**
+ * Arena intro: open tight and low on the rival, sweep out to a wide profile of both fighters squaring off, then
+ * settle behind the player's shoulder so the hand-off to the follow camera is seamless.
+ */
+export function versusShot(player: Combatant, rival: Combatant, dur: number): CinematicShot {
+  return {
+    dur,
+    blendIn: 0.05,
+    blendOut: 0.7,
+    frame(u, out) {
+      const a = player.chest(new THREE.Vector3());
+      const b = rival.chest(new THREE.Vector3());
+      const dir = new THREE.Vector3().subVectors(b, a).setY(0).normalize();
+      const side = new THREE.Vector3(-dir.z, 0, dir.x);
+      const mid = a.clone().lerp(b, 0.5);
+      if (u < 0.32) {
+        // Low hero angle on the rival, slow push-in.
+        const k = smooth(u / 0.32);
+        out.pos.copy(b).addScaledVector(dir, -lerp(3.4, 2.7, k)).addScaledVector(side, 1.2).setY(b.y - 0.55);
+        out.look.copy(b).setY(b.y + 0.25);
+        out.fov = lerp(44, 38, k);
+        out.roll = lerp(-4, -2, k);
+      } else if (u < 0.72) {
+        // Wide tracking profile of both.
+        const k = smooth((u - 0.32) / 0.4);
+        const span = a.distanceTo(b);
+        out.pos.copy(mid).addScaledVector(side, lerp(span * 0.55, span * 0.85, k)).addScaledVector(dir, lerp(3, -2, k)).setY(mid.y + lerp(0.2, 1.4, k));
+        out.look.copy(mid).addScaledVector(dir, lerp(2, 0, k));
+        out.fov = lerp(52, 58, k);
+        out.roll = lerp(3, 0, k);
+      } else {
+        // Over the player's shoulder toward the rival.
+        const k = smooth((u - 0.72) / 0.28);
+        out.pos.copy(a).addScaledVector(dir, -lerp(3.2, 4.6, k)).addScaledVector(side, lerp(-1.6, -0.6, k)).setY(a.y + lerp(0.5, 1.0, k));
+        out.look.copy(b).lerp(a, lerp(0.25, 0.4, k));
+        out.fov = lerp(50, 62, k);
+        out.roll = 0;
+      }
+    },
+  };
+}
+
+/** Match finish: slow low orbit around the fallen (or ringed-out) fighter with the winner in the background. */
+export function finishShot(loser: Combatant, winner: Combatant, dur: number): CinematicShot {
+  return {
+    dur,
+    blendIn: 0.25,
+    blendOut: 0.5,
+    frame(u, out) {
+      const k = smooth(u);
+      const l = loser.chest(new THREE.Vector3());
+      const w = winner.chest(new THREE.Vector3());
+      const away = new THREE.Vector3().subVectors(l, w).setY(0);
+      if (away.lengthSq() < 1e-4) away.set(0, 0, 1);
+      away.normalize();
+      const side = new THREE.Vector3(-away.z, 0, away.x);
+      const a = lerp(-0.7, 0.5, k);
+      out.pos.copy(l).addScaledVector(away, Math.cos(a) * 4.2).addScaledVector(side, Math.sin(a) * 4.2).setY(l.y + lerp(0.4, 1.3, k));
+      out.look.copy(l).lerp(w, 0.3);
+      out.fov = lerp(46, 54, k);
+      out.roll = lerp(5, -2, k);
+    },
+  };
+}
+
 /** Chain attack finisher: dynamic angle sweeping around attacker and target. */
 export function chainShot(att: Combatant, target: Combatant, dur: number, style: 'rush' | 'meteor' | 'thunder'): CinematicShot {
   return {

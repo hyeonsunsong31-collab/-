@@ -29,7 +29,8 @@ import { CharacterScreen } from './ui/CharacterScreen.ts';
 import { ProgressToasts } from './ui/ProgressToasts.ts';
 import { portraitShot } from './camera/Shots.ts';
 import type { SaveService } from './net/SaveService.ts';
-import { STAT_KEYS, basePowerLevel, cloneStats, generateRival, type Difficulty, type Profile, type Stats } from '@ak/shared';
+import { Arena } from './gameplay/Arena.ts';
+import { STAT_KEYS, basePowerLevel, cloneStats, generateRival, type BotSpec, type Difficulty, type Profile, type Stats } from '@ak/shared';
 
 export type BootProgress = (frac: number, msg: string) => Promise<void>;
 
@@ -54,12 +55,14 @@ export class Game {
   clips!: Map<string, CompiledClip>;
   status!: CharacterScreen;
   toasts!: ProgressToasts;
+  arena!: Arena;
+  private captures = new Set<string>();
   /** A full-screen menu is open (world frozen, gameplay input captured). */
   menuOpen = false;
   /** Called when the player defeats a foe (progression hooks in here). */
   onKill: ((foe: Combatant) => void) | null = null;
   /** Non-player heroes (rival bots). */
-  readonly bots: { hero: Hero; ai: RivalAI }[] = [];
+  readonly bots: { hero: Hero; ai: RivalAI; ctl: BotControls }[] = [];
   ready = false;
   /** When false the gameplay loop does not drive the camera (preview / photo modes). */
   playing = false;
@@ -150,6 +153,7 @@ export class Game {
     this.status.onOpen = () => this.setMenu(true);
     this.status.onClose = () => this.setMenu(false);
     this.bindProgression();
+    this.arena = new Arena(this);
     this.scene.add(hero.group);
     const spawn = this.findSpawn(6, 22);
     this.player.teleport(spawn, Math.PI);
@@ -212,7 +216,8 @@ export class Game {
     this.save.onChange((p) => this.syncPlayer(p));
     this.save.onProgress((e) => {
       if (e.kind === 'xp' && e.xp) this.toasts.xp(e.xp);
-      if ((e.kind === 'level' || e.kind === 'match') && e.levels && e.levels > 0) {
+      // Arena rewards are presented by the result screen itself.
+      if (e.kind === 'level' && e.levels && e.levels > 0) {
         const to = e.profile.level;
         this.toasts.levelUp(to - e.levels, to, e.profile.unspent);
         this.vfx.levelUp(this.player);
@@ -233,34 +238,49 @@ export class Game {
   /** Whether a full-screen menu may open right now (not mid-cinematic, reeling or dead). */
   get canOpenMenu(): boolean {
     const p = this.player;
-    return this.playing && !this.chain.active && !this.camRig.inCinematic && !this.clock.slowmoActive && p.alive && p.state === 'normal' && !p.busy && (p.move === 'ground' || p.flying);
+    return this.playing && !this.arena.busy && !this.chain.active && !this.camRig.inCinematic && !this.clock.slowmoActive && p.alive && p.state === 'normal' && !p.busy && (p.move === 'ground' || p.flying);
   }
 
   /** Freeze the world (the fighter keeps breathing for the portrait camera) and hand input to the UI. */
   private setMenu(on: boolean): void {
     this.menuOpen = on;
-    this.clock.freeze('menu', on);
-    this.input.uiCapture = on;
+    this.setUiCapture('menu', on, true);
+    if (on) this.camRig.play(portraitShot(this.player));
+    else this.camRig.releaseShot();
+    document.body.classList.toggle('ak-menu-open', on);
+  }
+
+  /**
+   * A screen takes (or returns) keyboard/mouse input. Several can overlap; gameplay input resumes when none hold it.
+   * `freezeWorld` also stops world time while it is held (the player can't defend while reading a menu).
+   */
+  setUiCapture(key: string, on: boolean, freezeWorld = false): void {
+    if (on) this.captures.add(key);
+    else this.captures.delete(key);
+    this.input.uiCapture = this.captures.size > 0;
     if (on) {
       this.input.releaseAll();
       this.input.clearBuffer();
-      this.camRig.play(portraitShot(this.player));
-    } else {
-      this.camRig.releaseShot();
     }
-    document.body.classList.toggle('ak-menu-open', on);
+    this.clock.freeze(`ui-${key}`, on && freezeWorld);
   }
 
   /** Spawn a rival bot (training dummy / sparring partner) in front of the player. */
   spawnRival(difficulty: Difficulty = 'normal', dist = 9, stats?: Stats, level?: number): Hero {
     const spec = generateRival(this.player.stats, this.player.level, difficulty, Math.floor(Math.random() * 1e9));
+    if (stats) spec.stats = stats;
+    if (level) spec.level = level;
+    const p = this.player.pos.clone().addScaledVector(this.player.forward(), dist);
+    return this.spawnRivalSpec(spec, this.findSpawn(p.x, p.z), this.player.yaw + Math.PI).hero;
+  }
+
+  /** Spawn a Rogue Ascendant from a stat block (arena tickets come from the server). */
+  spawnRivalSpec(spec: BotSpec, pos: THREE.Vector3, yaw: number): { hero: Hero; ai: RivalAI; ctl: BotControls } {
     const ctl = new BotControls();
     const ch = new Character(RIVAL_LOOK, this.lighting, this.clips);
-    const p = this.player.pos.clone().addScaledVector(this.player.forward(), dist);
-    const spot = this.findSpawn(p.x, p.z);
-    const hero = new Hero(ch, this.world, spec.name, 'foe', level ?? spec.level, stats ?? spec.stats, ctl);
+    const hero = new Hero(ch, this.world, spec.name, 'foe', spec.level, cloneStats(spec.stats), ctl);
     hero.maxTier = spec.maxTier;
-    hero.teleport(spot, this.player.yaw + Math.PI);
+    hero.teleport(pos, yaw);
     const ai = new RivalAI(spec.skill, spec.style);
     ai.foe = this.player;
     ctl.brain = (h, c, dt) => ai.step(h, c, dt);
@@ -268,8 +288,20 @@ export class Game {
     this.combat.add(hero);
     this.vfx.track(hero);
     this.nameplates.add(hero);
-    this.bots.push({ hero, ai });
-    return hero;
+    this.bots.push({ hero, ai, ctl });
+    return { hero, ai, ctl };
+  }
+
+  /** Remove a rival bot from the world. */
+  despawnBot(hero: Hero): void {
+    const i = this.bots.findIndex((b) => b.hero === hero);
+    if (i < 0) return;
+    this.bots.splice(i, 1);
+    this.combat.remove(hero);
+    this.vfx.untrack(hero);
+    this.nameplates.remove(hero);
+    if (this.player.target === hero) this.player.target = null;
+    hero.char.dispose();
   }
 
   /** Nearest walkable spot to (x, z) that is clear of colliders. */
@@ -317,6 +349,7 @@ export class Game {
       this.player.update(this.clock.playerDt);
       for (const b of this.bots) b.hero.update(this.clock.worldDt);
       this.spawner.update(this.clock.worldDt, this.player);
+      this.arena.update(dt, this.clock.worldDt);
       this.combat.update(this.clock.worldDt, this.clock.playerDt);
       this.camRig.update(dt, this.input, this.player.camCtx);
       this.input.endFrame();
@@ -329,7 +362,8 @@ export class Game {
     if (this.playing) {
       this.camera.updateMatrixWorld();
       this.nameplates.playerLevel = this.player.level;
-      this.nameplates.update(dt, this.camera, this.chain.active || this.camRig.inCinematic);
+      const arenaMenu = this.arena.phase === 'select' || this.arena.phase === 'result' || this.arena.phase === 'loading';
+      this.nameplates.update(dt, this.camera, this.chain.active || this.camRig.inCinematic || arenaMenu);
     }
     for (const fn of this.onFrame) fn(this);
     this.camera.updateMatrixWorld();

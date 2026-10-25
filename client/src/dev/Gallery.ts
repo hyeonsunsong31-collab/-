@@ -24,6 +24,7 @@ export function runGallery(game: Game, params: URLSearchParams): void {
     imp: Looks.IMP_LOOK,
     golem: Looks.GOLEM_LOOK,
     warlock: Looks.WARLOCK_LOOK,
+    herald: Looks.HERALD_LOOK,
   };
   const look = looks[lookId] ?? Looks.HERO_LOOK;
   const formTier = Number(params.get('form') || 0);

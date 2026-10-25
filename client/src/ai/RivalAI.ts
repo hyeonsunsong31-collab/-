@@ -18,6 +18,11 @@ const _v2 = new THREE.Vector3();
  */
 export class RivalAI {
   foe: Combatant | null = null;
+  /**
+   * Arena awareness: metres from a point to the nearest stage edge (negative = off the stage) and the stage centre.
+   * When set, the bot keeps its fights away from the edge and never dashes or lands itself out of the ring.
+   */
+  stage: { inside: (p: THREE.Vector3) => number; center: THREE.Vector3 } | null = null;
   private plan: Plan = 'approach';
   private planT = 0;
   private think = 0;
@@ -49,6 +54,34 @@ export class RivalAI {
   }
 
   step(hero: Hero, ctl: BotControls, dt: number): void {
+    this.decide(hero, ctl, dt);
+    if (this.stage) this.guardEdge(hero, ctl);
+  }
+
+  /** Bend movement (and the dash direction it implies) back toward the middle near the ring's edge. */
+  private guardEdge(hero: Hero, ctl: BotControls): void {
+    const st = this.stage!;
+    const inside = st.inside(hero.pos);
+    const toC = _v2.subVectors(st.center, hero.pos).setY(0);
+    if (toC.lengthSq() < 1e-4) return;
+    toC.normalize();
+    const danger = THREE.MathUtils.clamp((4 - inside) / 4, 0, 1.5);
+    if (danger <= 0) return;
+    const out = -ctl.move.dot(toC);
+    if (out > 0) ctl.move.addScaledVector(toC, out * (0.6 + danger));
+    ctl.move.addScaledVector(toC, danger * 0.55);
+    const l = ctl.move.length();
+    if (l > 1) ctl.move.multiplyScalar(1 / l);
+    // Never sprint toward the edge.
+    if (ctl.move.dot(toC) < 0) ctl.sprint = false;
+    // Off the stage in the air: fly back over it before anything else.
+    if (inside < 0.5 && hero.move !== 'ground') {
+      ctl.move.copy(toC);
+      if (hero.move === 'fly') ctl.flyDir = toC.clone();
+    }
+  }
+
+  private decide(hero: Hero, ctl: BotControls, dt: number): void {
     ctl.move.set(0, 0, 0);
     ctl.sprint = false;
     ctl.vertical = 0;
