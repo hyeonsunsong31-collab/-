@@ -43,7 +43,11 @@ const run = async (frames, ms = 16) => {
 
 await page.evaluate(() => {
   window.__game.addFrameHook((g) => {
-    if (window.__god && g.player.alive) g.player.hp = g.player.maxHp;
+    // The scripted player only attacks, so keep it from being stun-locked as well as from falling.
+    if (window.__god && g.player.alive) {
+      g.player.hp = g.player.maxHp;
+      g.player.daze = 0;
+    }
   });
 });
 const untilPhase = async (ph, maxChunks = 60) => {
