@@ -149,9 +149,21 @@ export class Vfx {
   private runes: { mesh: THREE.Mesh; mat: THREE.ShaderMaterial; t: number; dur: number }[] = [];
   private runeGeo = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
 
-  /** Warlock rune: a glowing sigil on the ground that brightens and spins faster until it detonates. */
-  rune(pos: THREE.Vector3, dur: number, radius = 3.4): void {
-    const mat = new THREE.ShaderMaterial({
+  /**
+   * Compile every lazily created effect shader during boot (hidden instances + a throwaway ghost), so first uses
+   * mid-fight — a beam, a rune, an afterimage, a shockwave — never hitch.
+   */
+  prewarm(hero: Combatant): void {
+    this.ki.prewarm();
+    this.waves.prewarm();
+    const rune = new THREE.Mesh(this.runeGeo, this.runeMaterial());
+    rune.visible = false;
+    this.group.add(rune);
+    this.ghosts.spawn(hero.char, '#9fd8ff', 0.01, 0);
+  }
+
+  private runeMaterial(): THREE.ShaderMaterial {
+    return new THREE.ShaderMaterial({
       uniforms: { uK: { value: 0 }, uT: { value: 0 }, uColor: { value: new THREE.Color('#c04bff') } },
       vertexShader: /* glsl */ `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
       fragmentShader: /* glsl */ `
@@ -178,6 +190,11 @@ export class Vfx {
       polygonOffset: true,
       polygonOffsetFactor: -4,
     });
+  }
+
+  /** Warlock rune: a glowing sigil on the ground that brightens and spins faster until it detonates. */
+  rune(pos: THREE.Vector3, dur: number, radius = 3.4): void {
+    const mat = this.runeMaterial();
     const mesh = new THREE.Mesh(this.runeGeo, mat);
     mesh.position.copy(pos).setY(pos.y + 0.08);
     mesh.scale.setScalar(radius);

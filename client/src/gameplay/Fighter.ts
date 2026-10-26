@@ -192,6 +192,7 @@ export class Fighter {
   /** Integrate movement for this frame. */
   protected integrate(dt: number, intent: MoveIntent | null): void {
     const hasAction = this.busy;
+    const y0 = this.pos.y;
     const sp = this.speedMult;
     if (this.move === 'fly') {
       let target = _v.set(0, 0, 0);
@@ -246,10 +247,12 @@ export class Fighter {
     }
 
     // Collisions with props / buildings / trunks. Grounded fighters step up anything under knee height
-    // (stairs, stage edges, kerbs); the ground snap below then lifts them onto it.
+    // (stairs, stage edges, kerbs); the ground snap below then lifts them onto it. Falling fighters test from where
+    // their feet were at the start of the frame: a top they were above is a landing, never a wall to be shoved off
+    // sideways (a launched fighter dipping into the arena stage would otherwise be pushed to its nearest edge).
     const out = { x: 0, z: 0 };
-    const step = this.move === 'ground' ? STEP_UP : 0;
-    if (this.world.colliders.resolve(this.pos.x, this.pos.z, this.radius, this.pos.y + step, this.height - step, out)) {
+    const feet = this.move === 'ground' ? this.pos.y + STEP_UP : Math.max(this.pos.y, y0);
+    if (this.world.colliders.resolve(this.pos.x, this.pos.z, this.radius, feet, this.height - (feet - this.pos.y), out)) {
       this.pos.x = out.x;
       this.pos.z = out.z;
     }

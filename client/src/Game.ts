@@ -190,6 +190,7 @@ export class Game {
     this.world.update(0, this.camera);
     await progress(0.9, 'Warming up shaders…');
     const t1 = performance.now();
+    this.vfx.prewarm(this.player);
     this.renderer.gl.compile(this.scene, this.camera);
     console.info(`[boot] shaders compiled in ${Math.round(performance.now() - t1)} ms`);
     this.ready = true;

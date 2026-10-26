@@ -7,3 +7,4 @@ client/tests/e2e/out/
 .vite/
 coverage/
 client/tests/e2e/dbg/
+client/dist-artifact/

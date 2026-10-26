@@ -294,7 +294,13 @@ export class MapView {
     ctx.scale(scale, scale);
     ctx.translate(-mx, -mz);
     ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(this.map, 0, 0);
+    // Only the square around the player that can rotate into view, not the whole 1024 px relief.
+    const half = Math.ceil((this.radius / M_PER_PX) * Math.SQRT2) + 2;
+    const sx = Math.max(0, Math.floor(mx - half));
+    const sy = Math.max(0, Math.floor(mz - half));
+    const sw = Math.min(this.map.width, Math.ceil(mx + half)) - sx;
+    const sh = Math.min(this.map.height, Math.ceil(mz + half)) - sy;
+    if (sw > 0 && sh > 0) ctx.drawImage(this.map, sx, sy, sw, sh, sx, sy, sw, sh);
     ctx.restore();
     // Icons (crisp, unrotated glyphs at rotated positions).
     const place = (x: number, z: number): [number, number] | null => {

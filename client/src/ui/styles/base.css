@@ -13,6 +13,7 @@
   --ak-paper: #f4efe2;
   --ak-scouter: #5dff7a;
   --ak-violet: #a98bff;
+  --ak-bg: #0b0d12;
   --ak-font-display: 'Bebas Neue', 'Impact', 'Arial Narrow', sans-serif;
   --ak-font-ui: 'Rajdhani', 'Segoe UI', system-ui, sans-serif;
   --ak-safe-l: env(safe-area-inset-left, 0px);
@@ -31,7 +32,7 @@ body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: #0b0d12;
+  background: var(--ak-bg);
   color: var(--ak-paper);
   font-family: var(--ak-font-ui);
   -webkit-tap-highlight-color: transparent;

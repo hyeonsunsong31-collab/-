@@ -83,7 +83,7 @@ export class World {
   crater(x: number, z: number, radius: number, depth: number) {
     const box = this.data.hf.crater(x, z, radius, depth);
     this.terrain.invalidate(box.minX, box.maxX, box.minZ, box.maxZ);
-    this.data.syncHeightTex();
+    this.data.syncHeightTex(box);
     this.data.scorch(x, z, radius, 1);
     const felled = this.vegetation.blast(x, z, radius * 1.15);
     const rocks = this.vegetation.shatterRocks(x, z, radius);

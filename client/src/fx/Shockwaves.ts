@@ -119,6 +119,15 @@ export class Shockwaves {
     return w;
   }
 
+  /** Build one of each wave kind up front (hidden) so their shaders compile at boot. */
+  prewarm(): void {
+    for (const k of ['ground', 'air', 'shell', 'cone'] as Kind[]) {
+      const w = this.get(k);
+      w.busy = false;
+      w.mesh.visible = false;
+    }
+  }
+
   /** Flat ring racing outward along the ground. */
   ground(pos: THREE.Vector3, radius: number, color: THREE.ColorRepresentation, dur = 0.6, alpha = 1, width = 0.07): void {
     const w = this.get('ground');

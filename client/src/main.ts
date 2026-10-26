@@ -25,7 +25,13 @@ async function main(): Promise<void> {
     }
   })();
   const quality = (params.get('q') as QualityLevel | null) ?? stored ?? defaultQuality();
-  if (params.has('touch')) localStorage.setItem('ak.settings', JSON.stringify({ ...JSON.parse(localStorage.getItem('ak.settings') || '{}'), touch: 'on' }));
+  if (params.has('touch')) {
+    try {
+      localStorage.setItem('ak.settings', JSON.stringify({ ...JSON.parse(localStorage.getItem('ak.settings') || '{}'), touch: 'on' }));
+    } catch {
+      // Storage blocked: touch auto-detection still applies.
+    }
+  }
   const save = new SaveService();
   const settings = new Settings();
   const game = new Game(canvas, quality, save, settings);
@@ -39,7 +45,9 @@ async function main(): Promise<void> {
     return;
   }
   await bootProgress(0.02, 'Contacting the realm…');
-  const mode = await save.init({ offline: params.has('offline') || params.has('gallery') });
+  // Static builds (VITE_OFFLINE=1) have no server behind them, so they never try to reach one.
+  const offline = import.meta.env.VITE_OFFLINE === '1' || params.has('offline') || params.has('gallery');
+  const mode = await save.init({ offline });
   console.info(`[boot] save mode: ${mode} (Lv ${save.profile.level})`);
   await game.boot(bootProgress);
   document.getElementById('boot')?.classList.add('done');

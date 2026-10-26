@@ -80,7 +80,14 @@ export class Input extends ActionState {
   toggleShiftLock(): void {
     this.shiftLock = !this.shiftLock;
     if (this.touchMode) return;
-    if (this.shiftLock) this.canvas.requestPointerLock?.();
+    if (this.shiftLock) {
+      // Pointer lock is optional: where the frame refuses it, shift-lock keeps its camera and drag still turns it.
+      try {
+        void Promise.resolve(this.canvas.requestPointerLock?.()).catch(() => {});
+      } catch {
+        /* refused synchronously */
+      }
+    }
     else if (document.pointerLockElement === this.canvas) document.exitPointerLock();
   }
 

@@ -106,15 +106,19 @@ export class Spawner {
 
   /** Loose AIs for mobs spawned outside camps. */
   readonly extra: { mob: Mob; ai: MobAI }[] = [];
+  /** Camp slots waiting to be filled; building a fighter costs a few ms, so a whole camp at once would hitch. */
+  private pending: [Camp, CampSlot][] = [];
 
   update(dt: number, player: Combatant): void {
     const foes = [player];
     this.director.prune();
+    const next = this.pending.shift();
+    if (next && next[0].active && !next[1].mob) this.fill(next[0], next[1]);
     for (const c of this.camps) {
       const d = Math.hypot(player.pos.x - c.x, player.pos.z - c.z);
       if (!c.active && d < ACTIVATE && this.enabled) {
         c.active = true;
-        for (const s of c.slots) if (!s.mob && s.respawn <= 0) this.fill(c, s);
+        for (const s of c.slots) if (!s.mob && s.respawn <= 0) this.pending.push([c, s]);
       } else if (c.active && d > DEACTIVATE) {
         c.active = false;
         for (const s of c.slots) {
@@ -164,6 +168,7 @@ export class Spawner {
 
   /** Remove every mob (arena matches, debug). */
   clear(): void {
+    this.pending.length = 0;
     for (const c of this.camps) {
       c.active = false;
       for (const s of c.slots) {

@@ -1,11 +1,26 @@
 import * as THREE from 'three';
 import { Rng } from '@ak/shared';
-import { Heightfield, HF_N } from './Heightfield.ts';
+import { Heightfield, HF_N, HF_RES } from './Heightfield.ts';
 import { WORLD_HALF, WORLD_SIZE, POIS, LAKE, WATER_LEVEL } from './layout.ts';
 import { smoothstep } from '../core/noise.ts';
 
 export const SPLAT_N = 512;
 const SPLAT_RES = WORLD_SIZE / SPLAT_N;
+
+/**
+ * Queue a partial upload of texels [i0, i1] on row j. three uploads each range as a one-row strip and counts four
+ * components per texel whatever the format, so ranges are always expressed in texels × 4.
+ */
+function rowRange(tex: THREE.DataTexture, width: number, j: number, i0: number, i1: number): void {
+  tex.addUpdateRange((j * width + i0) * 4, (i1 - i0 + 1) * 4);
+}
+
+/** Flags a texture once its first full upload has happened (partial updates need allocated storage). */
+function trackUpload(tex: THREE.DataTexture): { live: boolean } {
+  const state = { live: false };
+  tex.onUpdate = () => (state.live = true);
+  return state;
+}
 
 export interface Scatter {
   x: number;
@@ -53,15 +68,42 @@ export class WorldData {
     this.heightTex = new THREE.DataTexture(this.heightHalf, HF_N, HF_N, THREE.RedFormat, THREE.HalfFloatType);
     this.heightTex.magFilter = THREE.LinearFilter;
     this.heightTex.minFilter = THREE.LinearFilter;
+    this.heightLive = trackUpload(this.heightTex);
+    this.damageLive = trackUpload(this.damageTex);
     this.syncHeightTex();
     this.scatter(seed);
   }
 
-  syncHeightTex(): void {
+  private heightLive: { live: boolean };
+  private damageLive: { live: boolean };
+
+  /** Mirror the heightfield into the GPU height texture; with a world box (a crater), only the texels it covers. */
+  syncHeightTex(box?: { minX: number; maxX: number; minZ: number; maxZ: number }): void {
     const d = this.hf.data;
     const h = this.heightHalf;
-    for (let i = 0; i < d.length; i++) h[i] = THREE.DataUtils.toHalfFloat(d[i]);
+    if (!box || !this.heightLive.live) {
+      for (let i = 0; i < d.length; i++) h[i] = THREE.DataUtils.toHalfFloat(d[i]);
+      this.heightTex.clearUpdateRanges();
+      this.heightTex.needsUpdate = true;
+      return;
+    }
+    const cell = (v: number) => Math.min(HF_N - 1, Math.max(0, Math.floor((v + WORLD_HALF) / HF_RES)));
+    const i0 = cell(box.minX);
+    const i1 = Math.min(HF_N - 1, cell(box.maxX) + 1);
+    const j0 = cell(box.minZ);
+    const j1 = Math.min(HF_N - 1, cell(box.maxZ) + 1);
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) h[j * HF_N + i] = THREE.DataUtils.toHalfFloat(d[j * HF_N + i]);
+      rowRange(this.heightTex, HF_N, j, i0, i1);
+    }
     this.heightTex.needsUpdate = true;
+  }
+
+  /** Upload changed damage texels (rows of a splat-space box) instead of the whole 512² map. */
+  private damageRows(i0: number, i1: number, j0: number, j1: number): void {
+    if (this.damageLive.live) for (let j = j0; j <= j1; j++) rowRange(this.damageTex, SPLAT_N, j, i0, i1);
+    else this.damageTex.clearUpdateRanges();
+    this.damageTex.needsUpdate = true;
   }
 
   private buildSplat(): void {
@@ -204,7 +246,8 @@ export class WorldData {
       }
     }
     this.markHot(ci, cj, rr);
-    this.damageTex.needsUpdate = true;
+    const r = this.hot[this.hot.length - 1];
+    this.damageRows(r.i0, r.i1, r.j0, r.j1);
   }
 
   /** Crack glow cools over time (only inside regions that were recently hit). */
@@ -227,9 +270,9 @@ export class WorldData {
           }
         }
       }
+      this.damageRows(r.i0, r.i1, r.j0, r.j1);
       if (!any) this.hot.splice(h, 1);
     }
-    this.damageTex.needsUpdate = true;
   }
 
   private hot: { i0: number; i1: number; j0: number; j1: number }[] = [];

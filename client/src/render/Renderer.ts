@@ -47,7 +47,7 @@ export class Renderer {
       preserveDrawingBuffer: false,
     });
     this.gl.shadowMap.enabled = true;
-    this.gl.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.gl.shadowMap.type = THREE.PCFShadowMap;
     this.gl.toneMapping = THREE.NoToneMapping;
     this.gl.outputColorSpace = THREE.SRGBColorSpace;
     this.basePixelRatio = Math.min(window.devicePixelRatio || 1, quality.pixelRatio);

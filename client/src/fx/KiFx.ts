@@ -267,6 +267,43 @@ export class KiFx {
     this.bolts.splice(this.bolts.indexOf(v), 1);
   }
 
+  /**
+   * Hidden instances of the per-use bolt and beam shaders. The boot-time `renderer.compile` walks hidden meshes
+   * too, so the first ki blast or beam in a fight never stalls on a shader compile.
+   */
+  prewarm(): void {
+    const capsuleMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uA: { value: new THREE.Vector3() },
+        uB: { value: new THREE.Vector3() },
+        uR: { value: 0.3 },
+        uColor: { value: new THREE.Color() },
+        uAlpha: { value: 0 },
+        uT: { value: 0 },
+        uLenU: { value: 2 },
+      },
+      vertexShader: CAPSULE_VERT,
+      fragmentShader: CAPSULE_FRAG,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const beamMat = new THREE.ShaderMaterial({
+      uniforms: { uColor: { value: new THREE.Color() }, uAlpha: { value: 0 }, uT: { value: 0 }, uLen: { value: 10 }, uCore: { value: 1 } },
+      vertexShader: BEAM_VERT,
+      fragmentShader: BEAM_FRAG,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+    });
+    for (const m of [new THREE.Mesh(this.quad, capsuleMat), new THREE.Mesh(this.cyl, beamMat)]) {
+      m.visible = false;
+      m.frustumCulled = false;
+      this.group.add(m);
+    }
+  }
+
   /* ------------------------------------------------------------------ beams */
 
   startBeam(b: Beam): void {

@@ -23,7 +23,9 @@ const page = [
   '<title>Ascendant Ki</title>',
   '<meta name="claude:viewport-fit-sides" content="cover">',
   '<meta name="theme-color" content="#0b0d12">',
-  '<style>html,body{height:100%;background:#0b0d12;color:#f4efe2;overflow:hidden}:root{padding:0!important}</style>',
+  // Full-bleed game: the canvas and HUD are fixed to the viewport (HUD edges add the safe-area insets themselves),
+  // so the body's side gutter never moves anything; it is there for the host's side-cover contract.
+  '<style>:root{--ak-bg:#0b0d12;--ak-paper:#f4efe2;color-scheme:dark}html,body{height:100%;background:var(--ak-bg);color:var(--ak-paper);overflow:hidden}body{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}</style>',
   ...keep.filter((l) => !l.startsWith('<title>')),
   body.replace(/<script[^>]*src="\/src\/main\.ts"[^>]*><\/script>/, '').trim(),
 ].join('\n');

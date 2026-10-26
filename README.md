@@ -24,6 +24,14 @@ npm run build        # client → client/dist
 npm start            # Fastify serves the API and client/dist on :8080
 ```
 
+```bash
+node scripts/build-artifact.mjs   # offline-only static build → client/dist-artifact
+```
+
+The artifact build sets `VITE_OFFLINE=1`, so it never contacts a server and keeps progress in the browser. It writes
+`page.html` (the page body for hosts that supply their own document skeleton) and `files.json` (every asset it
+references). Serve `client/dist-artifact/index.html` from any static host to play it.
+
 Other commands:
 
 - `npm run typecheck`: checks shared, server and client.
