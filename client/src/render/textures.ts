@@ -225,6 +225,56 @@ export function rockTexture(): PbrSet {
   return set;
 }
 
+/**
+ * Freshly quarried limestone: pale warm grain, patches of parallel chisel dressing, faint bedding lines and pores.
+ * The striation frequencies are whole multiples of the tile so the pattern repeats seamlessly.
+ */
+export function cutStoneTexture(): PbrSet {
+  const key = 'cutStone';
+  if (cache.has(key)) return cache.get(key)!;
+  const S = 512;
+  const n = new Noise(311);
+  const rng = new Rng(311);
+  const [c, ctx] = canvas(S, S);
+  const [hc, hctx] = canvas(S, S);
+  const pores = new Uint8Array(S * S);
+  for (let i = 0; i < 900; i++) {
+    const x = rng.int(0, S - 1);
+    const y = rng.int(0, S - 1);
+    pores[y * S + x] = 1;
+    if (rng.chance(0.4)) pores[y * S + ((x + 1) % S)] = 1;
+  }
+  const hs = new Float32Array(S * S);
+  const tone = new Float32Array(S * S);
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const k = y * S + x;
+      const broad = tile(n, x, y, S, S, 2) * 0.6 + tile(n, x, y, S, S, 5) * 0.4;
+      const grain = tile(n, x, y, S, S, 40) * 0.5 + tile(n, x, y, S, S, 90) * 0.5;
+      // Chisel dressing: diagonal grooves, only where a low-frequency mask says the face was worked.
+      const dress = Math.max(0, Math.min(1, tile(n, x + 300, y, S, S, 3) * 2.2 + 0.35));
+      const groove = Math.pow(Math.abs(Math.sin((Math.PI * 2 * (x * 46 + y * 15)) / S + grain * 0.6)), 6);
+      // Bedding: faint wavy horizontal layers.
+      const bed = Math.pow(Math.abs(Math.sin((Math.PI * 2 * 7 * y) / S + tile(n, x, y, S, S, 3) * 1.8)), 40);
+      const pore = pores[k];
+      hs[k] = Math.max(0, Math.min(1, 0.55 + broad * 0.12 + grain * 0.08 - groove * dress * 0.22 - bed * 0.1 - pore * 0.35));
+      tone[k] = 1 + broad * 0.07 + grain * 0.045 - groove * dress * 0.06 - bed * 0.07 - pore * 0.28;
+    }
+  }
+  fillNoise(hctx, S, S, (x, y) => {
+    const v = hs[y * S + x] * 255;
+    return [v, v, v];
+  });
+  fillNoise(ctx, S, S, (x, y) => {
+    const t = tone[y * S + x];
+    const warm = tile(n, x + 900, y, S, S, 1.5) * 0.05;
+    return [Math.min(255, 204 * t * (1 + warm)), Math.min(255, 195 * t), Math.min(255, 176 * t * (1 - warm))];
+  });
+  const set = { map: toTexture(c), normalMap: normalFromHeight(hc, 3) };
+  cache.set(key, set);
+  return set;
+}
+
 export function plasterTexture(): PbrSet {
   const key = 'plaster';
   if (cache.has(key)) return cache.get(key)!;
@@ -272,6 +322,71 @@ export function woodTexture(dark = true): PbrSet {
     return [base[0] * k, base[1] * k, base[2] * k];
   });
   const set = { map: toTexture(c), normalMap: normalFromHeight(hc, 2.5) };
+  cache.set(key, set);
+  return set;
+}
+
+/**
+ * Light boards for crates, stalls, doors and benches: five planks per 2 m tile with dark seams, a butt joint or two,
+ * per-plank tint, streaky grain that drifts along each board and the odd knot.
+ */
+export function plankTexture(): PbrSet {
+  const key = 'planks';
+  if (cache.has(key)) return cache.get(key)!;
+  const S = 256;
+  const N = 5;
+  const PW = S / N;
+  const n = new Noise(41);
+  const rng = new Rng(41);
+  const planks = Array.from({ length: N }, () => ({
+    tint: rng.range(0.82, 1.12),
+    warm: rng.range(-0.06, 0.06),
+    joint: rng.chance(0.6) ? rng.int(20, S - 20) : -1,
+    phase: rng.range(0, 100),
+    knot: rng.chance(0.55) ? { x: rng.range(10, PW - 10), y: rng.range(0, S), r: rng.range(3, 6) } : null,
+  }));
+  const [c, ctx] = canvas(S, S);
+  const [hc, hctx] = canvas(S, S);
+  const hs = new Float32Array(S * S);
+  const tone = new Float32Array(S * S);
+  const warmth = new Float32Array(S * S);
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const pi = Math.floor(x / PW);
+      const p = planks[pi];
+      const lx = x - pi * PW;
+      const seam = lx < 1.5 || lx > PW - 1.5 ? 1 : 0;
+      const joint = p.joint >= 0 && Math.abs(y - p.joint) < 1.2 ? 1 : 0;
+      // Grain: thin dark streaks whose position drifts slowly along the board, bending around the knot.
+      let gx = lx + tile(n, x, y, S, S, 1.2) * 6 + p.phase;
+      let knot = 0;
+      if (p.knot) {
+        const dy = y - p.knot.y;
+        const wy = dy - S * Math.round(dy / S);
+        const dx = lx - p.knot.x;
+        const d = Math.hypot(dx, wy * 0.45);
+        gx += (p.knot.r * 3) / (1 + d * 0.25) * Math.sign(dx);
+        knot = Math.max(0, 1 - d / p.knot.r);
+      }
+      const streak = Math.pow(Math.abs(Math.sin(gx * 0.85)), 10) * 0.6 + Math.pow(Math.abs(Math.sin(gx * 0.31 + 1.7)), 16) * 0.4;
+      const fine = tile(n, x, y, S, S, 60) * 0.5 + 0.5;
+      const k = y * S + x;
+      hs[k] = Math.max(0, 0.6 - streak * 0.12 - fine * 0.05 - seam * 0.45 - joint * 0.4 - knot * 0.15);
+      tone[k] = p.tint * (1 - streak * 0.22 - fine * 0.06 - knot * 0.45) * (seam || joint ? 0.42 : 1);
+      warmth[k] = p.warm;
+    }
+  }
+  fillNoise(hctx, S, S, (x, y) => {
+    const v = hs[y * S + x] * 255;
+    return [v, v, v];
+  });
+  fillNoise(ctx, S, S, (x, y) => {
+    const k = y * S + x;
+    const t = tone[k];
+    const w = warmth[k];
+    return [Math.min(255, 158 * t * (1 + w)), Math.min(255, 118 * t), Math.min(255, 76 * t * (1 - w))];
+  });
+  const set = { map: toTexture(c), normalMap: normalFromHeight(hc, 3) };
   cache.set(key, set);
   return set;
 }

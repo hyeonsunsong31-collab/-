@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 export interface Box2Collider {
   kind: 'box';
@@ -97,6 +98,17 @@ export class GeoBuilder {
 
   box(key: string, w: number, h: number, d: number, x: number, y: number, z: number, rx = 0, ry = 0, rz = 0, uvScale = 0.5): void {
     const g = new THREE.BoxGeometry(w, h, d);
+    const m = new THREE.Matrix4().compose(
+      new THREE.Vector3(x, y, z),
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz, 'YXZ')),
+      new THREE.Vector3(1, 1, 1),
+    );
+    this.add(key, g, m, uvScale);
+  }
+
+  /** Box with chamfered edges (cut or weathered stone): the bevels catch the sun so the block reads as solid. */
+  roundedBox(key: string, w: number, h: number, d: number, x: number, y: number, z: number, rx = 0, ry = 0, rz = 0, radius = 0.12, uvScale = 0.5): void {
+    const g = new RoundedBoxGeometry(w, h, d, 2, Math.min(radius, w / 2, h / 2, d / 2) * 0.999);
     const m = new THREE.Matrix4().compose(
       new THREE.Vector3(x, y, z),
       new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz, 'YXZ')),

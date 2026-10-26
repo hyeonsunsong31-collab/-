@@ -9,6 +9,7 @@ export class BotControls implements HeroControls {
   flyDir: THREE.Vector3 | null = null;
   vertical = 0;
   faceYaw: number | null = null;
+  viewYaw: number | null = null;
   sprint = false;
   aim: THREE.Vector3 | null = null;
   private holds = new Map<Action, number>();

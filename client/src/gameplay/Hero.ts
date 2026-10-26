@@ -21,6 +21,8 @@ export interface HeroControls {
   vertical: number;
   /** Face this yaw while moving (shift-lock); null = face the movement direction. */
   faceYaw: number | null;
+  /** Camera forward yaw (null for bots): out of a fight, dashes square up to it so each key maps to its clip. */
+  viewYaw: number | null;
   /** Sprint held / toggled. */
   sprint: boolean;
   /** Fallback aim point for ki attacks when there is no target (camera centre / bot focus). */
@@ -690,6 +692,13 @@ export class Hero extends Combatant {
     if (this.move === 'air' && this.airDashUsed) return false;
     const it = this.intent;
     const mag = it.dir.length();
+    if (mag > 0.2 && this.move !== 'fly') {
+      // Square up before picking the clip: to a nearby foe in a fight (side dashes circle it), otherwise to the
+      // camera, so W+Q is always the forward lunge, S+Q the back hop and A/D+Q the side slides.
+      const foe = this.target?.alive && this.target.pos.distanceTo(this.pos) < 16 ? this.target : null;
+      const ref = foe ? this.yawTo(foe.pos) : this.controls.viewYaw;
+      if (ref !== null) this.yaw = ref;
+    }
     if (mag > 0.2) this.dashWorld.copy(it.dir).normalize();
     else this.dashWorld.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const pick = dashClipFor(this.dashWorld.x, this.dashWorld.z, this.yaw);
@@ -950,7 +959,8 @@ export class Hero extends Combatant {
     }
 
     // Facing.
-    const freeToTurn = !this.busy || this.actionName.startsWith('dash_');
+    // Only the forward lunge steers with the stick; side slides and back hops keep the facing they started with.
+    const freeToTurn = !this.busy || this.actionName === 'dash_f';
     if (freeToTurn) {
       if (it.faceYaw !== null) this.turnToward(it.faceYaw, 20, dt);
       else if (this.move === 'fly') {

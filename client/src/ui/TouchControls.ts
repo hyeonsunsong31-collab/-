@@ -33,21 +33,22 @@ const ICON = {
 
 const BUTTONS: Btn[] = [
   { id: 'atk', action: 'light', label: 'ATK', icon: ICON.atk, size: 'atk' },
-  { id: 'dash', action: 'dodge', label: 'DASH', icon: ICON.dash, angle: 95, r: 102, size: 'arc' },
-  { id: 'ki', action: 'ki', label: 'KI', alt: 'ULT', icon: ICON.ki, angle: 126, r: 104, size: 'arc' },
-  { id: 'heavy', action: 'heavy', label: 'SPECIAL', alt: 'EX', icon: ICON.heavy, angle: 157, r: 104, size: 'arc' },
-  { id: 'guard', action: 'block', label: 'GUARD', icon: ICON.guard, angle: 188, r: 104, size: 'arc' },
-  { id: 'jump', action: 'jump', label: 'JUMP', alt: 'RISE', icon: ICON.jump, angle: 218, r: 100, size: 'arc' },
-  { id: 'power', action: 'transform', label: 'POWER', alt: 'FORM', icon: ICON.power, angle: 62, r: 108, size: 'arc' },
-  { id: 'down', action: 'descend', label: 'DOWN', icon: ICON.down, css: { right: 'calc(268px + var(--ak-safe-r))', bottom: 'calc(26px + var(--ak-safe-b))' }, size: 'small' },
+  // Evenly spaced (29°) on one radius: neighbours keep a small gap and the lowest (JUMP) clears the screen edge.
+  { id: 'power', action: 'transform', label: 'POWER', alt: 'FORM', icon: ICON.power, angle: 64, r: 126, size: 'arc' },
+  { id: 'dash', action: 'dodge', label: 'DASH', icon: ICON.dash, angle: 93, r: 126, size: 'arc' },
+  { id: 'ki', action: 'ki', label: 'KI', alt: 'ULT', icon: ICON.ki, angle: 122, r: 126, size: 'arc' },
+  { id: 'heavy', action: 'heavy', label: 'SPECIAL', alt: 'EX', icon: ICON.heavy, angle: 151, r: 126, size: 'arc' },
+  { id: 'guard', action: 'block', label: 'GUARD', icon: ICON.guard, angle: 180, r: 126, size: 'arc' },
+  { id: 'jump', action: 'jump', label: 'JUMP', alt: 'RISE', icon: ICON.jump, angle: 209, r: 126, size: 'arc' },
+  { id: 'down', action: 'descend', label: 'DOWN', icon: ICON.down, css: { right: 'calc(268px * var(--tbs, 1) + var(--ak-safe-r))', bottom: 'calc(26px * var(--tbs, 1) + var(--ak-safe-b))' }, size: 'small' },
   { id: 'sprint', action: 'sprint', label: 'RUN', icon: ICON.sprint, css: { left: 'calc(22px + var(--ak-safe-l))', bottom: 'calc(178px + var(--ak-safe-b))' }, size: 'small', toggle: true },
   { id: 'lock', action: 'lock', label: 'TARGET', icon: ICON.lock, css: { left: 'calc(78px + var(--ak-safe-l))', bottom: 'calc(178px + var(--ak-safe-b))' }, size: 'small', tap: true },
-  { id: 'menu', action: 'menu', label: 'MENU', icon: ICON.menu, css: { right: 'calc(150px + var(--ak-safe-r))', top: 'calc(18px + var(--ak-safe-t))' }, size: 'small', tap: true },
-  { id: 'map', action: 'map', label: 'MAP', icon: ICON.map, css: { right: 'calc(150px + var(--ak-safe-r))', top: 'calc(74px + var(--ak-safe-t))' }, size: 'small', tap: true },
+  { id: 'menu', action: 'menu', label: 'MENU', icon: ICON.menu, css: { right: 'calc(var(--mini-clear) + var(--ak-safe-r))', top: 'calc(18px + var(--ak-safe-t))' }, size: 'small', tap: true },
+  { id: 'map', action: 'map', label: 'MAP', icon: ICON.map, css: { right: 'calc(var(--mini-clear) + var(--ak-safe-r))', top: 'calc(74px + var(--ak-safe-t))' }, size: 'small', tap: true },
 ];
 
 const ATK_RIGHT = 104;
-const ATK_BOTTOM = 92;
+const ATK_BOTTOM = 108;
 const STICK_R = 58;
 
 export interface TouchState {
@@ -72,6 +73,8 @@ export class TouchControls {
   private camId = -1;
   private camLast = { x: 0, y: 0 };
   private btnEls = new Map<string, HTMLElement>();
+  /** ATK and the arc, re-placed by `layout()` whenever the screen size changes. */
+  private cluster: { el: HTMLElement; b: Btn }[] = [];
   private enabled_ = false;
   /** Camera drag multiplier (settings). */
   sensitivity = 1;
@@ -97,6 +100,28 @@ export class TouchControls {
     window.addEventListener('pointerup', (e) => this.up(e));
     window.addEventListener('pointercancel', (e) => this.up(e));
     for (const b of BUTTONS) this.makeButton(b);
+    this.layout();
+    window.addEventListener('resize', () => this.layout());
+  }
+
+  /**
+   * Scale the ATK cluster to the screen: ~0.84× on 360 px-tall phones (the arc must fit under the minimap), 1× at
+   * 430 px, up to 1.15× on tablets. Button sizes follow through the `--tbs` CSS variable.
+   */
+  private layout(): void {
+    const k = Math.min(1.15, Math.max(0.8, Math.min(window.innerHeight / 430, window.innerWidth / 820)));
+    this.root.style.setProperty('--tbs', k.toFixed(3));
+    for (const { el, b } of this.cluster) {
+      let right = ATK_RIGHT;
+      let bottom = ATK_BOTTOM;
+      if (b.angle !== undefined) {
+        const a = (b.angle * Math.PI) / 180;
+        right -= Math.cos(a) * b.r!;
+        bottom += Math.sin(a) * b.r!;
+      }
+      el.style.right = `calc(${(right * k).toFixed(1)}px + var(--ak-safe-r))`;
+      el.style.bottom = `calc(${(bottom * k).toFixed(1)}px + var(--ak-safe-b))`;
+    }
   }
 
   private makeButton(b: Btn): void {
@@ -104,15 +129,8 @@ export class TouchControls {
     el.className = `tb ${b.size}`;
     el.dataset.id = b.id;
     el.innerHTML = `<svg viewBox="0 0 24 24">${b.icon}</svg><span>${b.label}</span>`;
-    if (b.size === 'atk') {
-      el.style.right = `calc(${ATK_RIGHT}px + var(--ak-safe-r))`;
-      el.style.bottom = `calc(${ATK_BOTTOM}px + var(--ak-safe-b))`;
-    } else if (b.angle !== undefined) {
-      const a = (b.angle * Math.PI) / 180;
-      const dx = Math.cos(a) * b.r!;
-      const dy = Math.sin(a) * b.r!;
-      el.style.right = `calc(${(ATK_RIGHT - dx).toFixed(1)}px + var(--ak-safe-r))`;
-      el.style.bottom = `calc(${(ATK_BOTTOM + dy).toFixed(1)}px + var(--ak-safe-b))`;
+    if (b.size === 'atk' || b.angle !== undefined) {
+      this.cluster.push({ el, b });
     } else if (b.css) {
       for (const [k, v] of Object.entries(b.css)) el.style.setProperty(k, v!);
     }

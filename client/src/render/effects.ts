@@ -22,7 +22,16 @@ export class AtmosphereEffect extends Effect {
       uniform float uFalloff;
       uniform float uAerial;
       void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth, out vec4 outputColor) {
-        if (depth >= 0.99999) { outputColor = inputColor; return; }
+        // First pass after the scene: drop NaN and cap Inf (additive effects overflowing the half-float buffer),
+        // which the bloom blur would otherwise smear into black blocks.
+        // Tested on the bits (compilers may fold isnan() away under fast-math) and replaced with a bvec mix, which
+        // selects instead of interpolating: NaN -> black, +Inf -> a bright but finite highlight.
+        uvec3 bits = floatBitsToUint(inputColor.rgb);
+        bvec3 special = equal(bits & 0x7f800000u, uvec3(0x7f800000u));
+        bvec3 posInf = equal(bits, uvec3(0x7f800000u));
+        vec3 src = mix(inputColor.rgb, mix(vec3(0.0), vec3(512.0), posInf), special);
+        src = clamp(src, 0.0, 512.0);
+        if (depth >= 0.99999) { outputColor = vec4(src, inputColor.a); return; }
         vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
         vec4 vp = uProjInv * clip;
         vp /= vp.w;
@@ -42,11 +51,12 @@ export class AtmosphereEffect extends Effect {
         fogCol = mix(fogCol, uSunColor, sunAmt * 0.65);
         float f = clamp(1.0 - exp(-fogInt), 0.0, 1.0);
         f = max(f, aerial * 0.85);
-        outputColor = vec4(mix(inputColor.rgb, fogCol, f), inputColor.a);
+        outputColor = vec4(mix(src, fogCol, f), inputColor.a);
       }`,
       {
         attributes: EffectAttribute.DEPTH,
-        blendFunction: BlendFunction.NORMAL,
+        // SRC, not NORMAL: NORMAL's mix(dst, src, 1.0) multiplies a NaN input by 0 and keeps it, undoing the guard.
+        blendFunction: BlendFunction.SRC,
         uniforms: new Map<string, THREE.Uniform>([
           ['uProjInv', new THREE.Uniform(new THREE.Matrix4())],
           ['uViewInv', new THREE.Uniform(new THREE.Matrix4())],

@@ -127,9 +127,9 @@
   text-shadow: 1px 1px 0 #000;
 }
 .ak-touch .tb.atk {
-  width: 96px;
-  height: 96px;
-  margin: 0 -48px -48px 0;
+  width: calc(96px * var(--tbs, 1));
+  height: calc(96px * var(--tbs, 1));
+  margin: 0 calc(-48px * var(--tbs, 1)) calc(-48px * var(--tbs, 1)) 0;
   background: radial-gradient(circle at 50% 30%, #fff3c4, var(--ak-gold) 45%, #b97a00);
   color: var(--ak-ink);
   box-shadow:
@@ -138,24 +138,24 @@
     0 0 26px rgba(255, 194, 26, 0.35);
 }
 .ak-touch .tb.atk svg {
-  width: 40px;
-  height: 40px;
+  width: calc(40px * var(--tbs, 1));
+  height: calc(40px * var(--tbs, 1));
 }
 .ak-touch .tb.atk span {
-  font-size: 12px;
+  font-size: calc(12px * var(--tbs, 1));
   text-shadow: none;
 }
 .ak-touch .tb.arc {
-  width: 60px;
-  height: 60px;
-  margin: 0 -30px -30px 0;
+  width: calc(60px * var(--tbs, 1));
+  height: calc(60px * var(--tbs, 1));
+  margin: 0 calc(-30px * var(--tbs, 1)) calc(-30px * var(--tbs, 1)) 0;
 }
 .ak-touch .tb.arc svg {
-  width: 24px;
-  height: 24px;
+  width: calc(24px * var(--tbs, 1));
+  height: calc(24px * var(--tbs, 1));
 }
 .ak-touch .tb.arc span {
-  font-size: 8px;
+  font-size: calc(8px * var(--tbs, 1));
   margin-top: 1px;
 }
 .ak-touch .tb.small {
@@ -208,4 +208,14 @@
   opacity: 0;
   pointer-events: none;
   transform: scale(0.6);
+}
+
+/* MENU / MAP sit just left of the minimap, whose size follows the screen (map.css). */
+.ak-touch {
+  --mini-clear: 214px;
+}
+@media (max-width: 900px), (max-height: 560px) {
+  .ak-touch {
+    --mini-clear: 150px;
+  }
 }

@@ -68,7 +68,7 @@ export class SkySystem {
             // Sun disk (HDR so bloom flares it).
             c += vec3(1.0, 0.95, 0.85) * smoothstep(0.99955, 0.9997, s) * 40.0;
             // Brighter horizon band toward the sun side.
-            c += vec3(0.25, 0.2, 0.12) * pow(1.0 - h, 6.0) * (0.4 + 0.6 * pow(s, 2.0));
+            c += vec3(0.25, 0.2, 0.12) * pow(max(1.0 - h, 0.0), 6.0) * (0.4 + 0.6 * s * s);
             gl_FragColor = vec4(c, 1.0);
           }`,
       }),

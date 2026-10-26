@@ -14,6 +14,8 @@ import {
   bannerTexture,
   clothTexture,
   rockTexture,
+  cutStoneTexture,
+  plankTexture,
   flagstoneTexture,
 } from '../render/textures.ts';
 import { windUniforms } from './Grass.ts';
@@ -75,19 +77,21 @@ export class Settlements {
     const std = (o: THREE.MeshStandardMaterialParameters, key: string) => L.register(new THREE.MeshStandardMaterial(o), undefined, key);
     const pl = plasterTexture();
     const wd = woodTexture(true);
-    const wl = woodTexture(false);
     const st = stoneWallTexture();
     const th = thatchTexture();
     const tl = roofTileTexture();
     const sl = slateTexture();
     const rk = rockTexture();
+    const cs = cutStoneTexture();
+    const pk = plankTexture();
     const fl = flagstoneTexture();
     return {
       plaster: std({ map: pl.map, normalMap: pl.normalMap, roughness: 0.92 }, 'plaster'),
       timber: std({ map: wd.map, normalMap: wd.normalMap, roughness: 0.85 }, 'timber'),
-      wood: std({ map: wl.map, normalMap: wl.normalMap, roughness: 0.8 }, 'wood'),
+      wood: std({ map: pk.map, normalMap: pk.normalMap, roughness: 0.8 }, 'wood'),
       stone: std({ map: st.map, normalMap: st.normalMap, roughness: 0.9 }, 'stone'),
       rough: std({ map: rk.map, normalMap: rk.normalMap, roughness: 0.92, color: '#b8b2a6' }, 'rough'),
+      cutStone: std({ map: cs.map, normalMap: cs.normalMap, roughness: 0.84, color: '#d4cec2' }, 'cutStone'),
       thatch: std({ map: th.map, normalMap: th.normalMap, roughness: 0.97 }, 'thatch'),
       tile: std({ map: tl.map, normalMap: tl.normalMap, roughness: 0.75 }, 'tile'),
       slate: std({ map: sl.map, normalMap: sl.normalMap, roughness: 0.62 }, 'slate'),
@@ -802,7 +806,7 @@ export class Settlements {
     // Campfire ring + logs.
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2;
-      gb.box('rough', 0.45, 0.3, 0.35, Math.cos(a) * 1.0, 0.12, Math.sin(a) * 1.0, 0, a, 0);
+      gb.roundedBox('rough', 0.45, 0.3, 0.35, Math.cos(a) * 1.0, 0.12, Math.sin(a) * 1.0, 0.1 * Math.sin(i * 2.3), a, 0.08 * Math.cos(i * 1.7), 0.12);
     }
     for (let i = 0; i < 3; i++) gb.box('timber', 0.18, 0.18, 1.3, 0, 0.2, 0, 0.2, (i / 3) * Math.PI, 0);
     const wp = new THREE.Vector3(0, 0.4, 0).applyMatrix4(gb.matrix);
@@ -828,25 +832,59 @@ export class Settlements {
       gb.colliderCircle(sx, sz, 0.25, 0, 2.4);
     }
     for (let i = 0; i < 4; i++) this.crate(rng.range(-5, 5), 0, rng.range(-5, 5), rng.range(0.6, 0.9), rng.range(0, 3));
-    if (id === 'camp_golem') {
-      // Quarry: big cut stone blocks.
-      for (let i = 0; i < 14; i++) {
-        const s = rng.range(1.5, 3.4);
-        const bx = rng.range(-16, 16);
-        const bz = rng.range(-16, 16);
-        gb.box('rough', s * 1.4, s, s, bx, s * 0.45, bz, 0, rng.range(0, 3), rng.range(-0.15, 0.15));
-        gb.colliderCircle(bx, bz, s * 0.7, 0, s);
-      }
-    }
+    if (id === 'camp_golem') this.buildQuarry(rng);
     if (id === 'camp_warlock') {
       // Standing stones circle.
       for (let i = 0; i < 9; i++) {
         const a = (i / 9) * Math.PI * 2;
-        gb.box('rough', 1.2, 4.2, 0.8, Math.cos(a) * 7, 2.0, Math.sin(a) * 7, rng.range(-0.08, 0.08), -a, rng.range(-0.06, 0.06));
+        gb.roundedBox('rough', 1.2, 4.2, 0.8, Math.cos(a) * 7, 2.0, Math.sin(a) * 7, rng.range(-0.08, 0.08), -a, rng.range(-0.06, 0.06), 0.22);
         gb.colliderCircle(Math.cos(a) * 7, Math.sin(a) * 7, 0.8, 0, 4);
       }
     }
     gb.pop();
+  }
+
+  /**
+   * Golem Quarry (camp-local space): a stepped cut face on one side, loose and stacked blocks around the rim and
+   * rubble at their feet, leaving the middle clear to fight in.
+   */
+  private buildQuarry(rng: Rng): void {
+    const gb = this.gb;
+    const block = (w: number, h: number, d: number, x: number, y: number, z: number, yaw: number, solid = true) => {
+      gb.roundedBox('cutStone', w, h, d, x, y + h / 2, z, 0, yaw, rng.range(-0.025, 0.025), Math.min(w, h, d) * 0.07);
+      if (solid) gb.colliderBox(x, z, w / 2, d / 2, y, y + h, yaw);
+      // Chips and spalls along the foot.
+      for (let k = 0; k < 3; k++) {
+        const a = rng.range(0, Math.PI * 2);
+        const r = Math.max(w, d) * 0.55 + rng.range(0, 0.6);
+        const s = rng.range(0.18, 0.5);
+        gb.roundedBox('rough', s * 1.3, s * 0.7, s, x + Math.cos(a) * r, y + s * 0.3, z + Math.sin(a) * r, rng.range(-0.3, 0.3), rng.range(0, 3), rng.range(-0.3, 0.3), s * 0.25);
+      }
+    };
+    // The cut face: two stepped tiers along an arc behind the camp.
+    const a0 = rng.range(0, Math.PI * 2);
+    for (let tier = 0; tier < 2; tier++) {
+      const r = 18 + tier * 2.6;
+      const n = 7 - tier;
+      for (let i = 0; i < n; i++) {
+        const a = a0 + (i / (n - 1) - 0.5) * 1.5 + rng.range(-0.04, 0.04);
+        const w = rng.range(2.6, 3.4);
+        const h = tier === 0 ? rng.range(2.2, 2.8) : rng.range(3.6, 4.6);
+        const d = rng.range(2.2, 2.8);
+        block(w, h, d, Math.cos(a) * r, 0, Math.sin(a) * r, Math.PI / 2 - a + rng.range(-0.05, 0.05));
+      }
+    }
+    // Loose blocks around the rim, some with a second block resting on top.
+    for (let i = 0; i < 6; i++) {
+      const a = a0 + Math.PI * 0.55 + (i / 6) * Math.PI * 1.1 + rng.range(-0.12, 0.12);
+      const r = rng.range(13.5, 16);
+      const x = Math.cos(a) * r;
+      const z = Math.sin(a) * r;
+      const s = rng.range(1.2, 1.9);
+      const yaw = rng.range(0, Math.PI);
+      block(s * 1.6, s, s * 1.1, x, 0, z, yaw);
+      if (i % 2 === 0) block(s * 1.1, s * 0.75, s * 0.9, x + rng.range(-0.25, 0.25), s, z + rng.range(-0.25, 0.25), yaw + rng.range(-0.5, 0.5), false);
+    }
   }
 
   /** Split-rail fences along roads near villages. */

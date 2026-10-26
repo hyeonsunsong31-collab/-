@@ -32,7 +32,7 @@ const FRAG = /* glsl */ `
     float across = exp(-y * y * 5.0);
     float core = exp(-y * y * 40.0);
     // vUv.x: 0 = oldest tail, 1 = head.
-    float tail = pow(vUv.x, 1.6);
+    float tail = pow(clamp(vUv.x, 0.0, 1.0), 1.6);
     vec3 c = vColor.rgb * across + vec3(1.0) * core * tail * 1.4;
     gl_FragColor = vec4(c * vColor.a * tail, 1.0);
   }

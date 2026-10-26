@@ -89,7 +89,8 @@ export class Aura {
                      mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x), mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z);
         }
         void main() {
-          float fr = 1.0 - abs(dot(normalize(vN), normalize(vV)));
+          // Clamped: rounding can push |dot| past 1, and pow() of a negative base is NaN on some GPUs.
+          float fr = clamp(1.0 - abs(dot(normalize(vN), normalize(vV))), 0.0, 1.0);
           vec3 q = vW * vec3(4.0, 2.2, 4.0) - vec3(0.0, uT * 5.5, 0.0);
           float n = vnoise(q) * 0.6 + vnoise(q * 2.3 + 4.0) * 0.4;
           float flame = smoothstep(0.45, 0.9, n + fr * 0.35);

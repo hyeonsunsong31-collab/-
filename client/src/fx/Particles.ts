@@ -106,7 +106,8 @@ const FRAG = /* glsl */ `
     } else if (s == 4) {
       // Thin ring.
       float r = sqrt(r2);
-      a = exp(-pow((r - 0.8) * 9.0, 2.0)) * smoothstep(1.0, 0.95, r);
+      float rr = (r - 0.8) * 9.0; // squared by hand: pow() of a negative base is undefined
+      a = exp(-rr * rr) * smoothstep(1.0, 0.95, r);
     } else if (s == 5) {
       // Debris chip: irregular opaque-ish fragment.
       float n = vnoise(vUv * 3.0 + 7.3);

@@ -172,12 +172,16 @@ export class Vfx {
           vec2 p = vUv * 2.0 - 1.0;
           float r = length(p);
           float a = atan(p.y, p.x) + uT * (0.6 + uK * 4.0);
-          float ring = exp(-pow((r - 0.92) * 38.0, 2.0)) + exp(-pow((r - 0.74) * 50.0, 2.0)) * 0.8;
+          // Squares written out: pow() with a negative base is undefined in GLSL.
+          float r1 = (r - 0.92) * 38.0;
+          float r2 = (r - 0.74) * 50.0;
+          float ring = exp(-r1 * r1) + exp(-r2 * r2) * 0.8;
           // Glyph band between the rings: angular ticks.
           float band = step(0.76, r) * step(r, 0.9);
           float glyph = band * step(0.55, fract(a * 7.0 / 3.14159)) * step(0.3, fract(a * 21.0 / 3.14159 + 0.2));
           // Inner star.
-          float star = exp(-pow(abs(sin(a * 2.5 - uT * 2.0)) * r * 6.0 - 0.0, 2.0)) * step(r, 0.72) * 0.35;
+          float st = abs(sin(a * 2.5 - uT * 2.0)) * r * 6.0;
+          float star = exp(-st * st) * step(r, 0.72) * 0.35;
           float fill = (1.0 - smoothstep(0.0, 0.95, r)) * uK * 0.5;
           float v = (ring + glyph * 0.9 + star + fill) * step(r, 1.0);
           float pulse = 0.7 + 0.3 * sin(uT * (6.0 + uK * 20.0));

@@ -29,8 +29,10 @@ export function transformShot(hero: Combatant, chargeDur: number): CinematicShot
         out.fov = lerp(48, 40, k);
         out.roll = lerp(0, -6, k);
       } else {
+        // The burst digs a crater under the hero: pull back and rise so the reveal looks down into the bowl and
+        // its glowing cracks instead of sitting behind the raised rim.
         const k = smooth(Math.min(1, (t - chargeDur) / 0.6));
-        orbit(hero, 1.4 + k * 0.25, lerp(2.6, 7.5, k), lerp(0.6, 1.5, k), out.pos);
+        orbit(hero, 1.4 + k * 0.25, lerp(2.6, 7.5, k), lerp(0.6, 2.6, k), out.pos);
         out.look.copy(hero.pos).setY(hero.pos.y + 1.2 * hero.char.scale);
         out.fov = lerp(40, 68, k);
         out.roll = lerp(-6, 2, k);

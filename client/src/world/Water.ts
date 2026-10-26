@@ -66,7 +66,7 @@ export class Water {
           float hz = wh(fp + vec2(0.0, e));
           vec3 n = normalize(vec3((h0 - hx) * 1.6, 1.0, (h0 - hz) * 1.6));
           vec3 v = normalize(cameraPosition - vW);
-          float fres = 0.02 + 0.98 * pow(1.0 - max(dot(n, v), 0.0), 5.0);
+          float fres = 0.02 + 0.98 * pow(clamp(1.0 - dot(n, v), 0.0, 1.0), 5.0);
           vec3 r = reflect(-v, n);
           // Sky reflection: gradient + env sample.
           vec3 sky = mix(vec3(0.55, 0.7, 0.85), vec3(0.22, 0.42, 0.72), clamp(r.y, 0.0, 1.0));

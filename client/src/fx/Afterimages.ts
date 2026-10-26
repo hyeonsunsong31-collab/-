@@ -49,7 +49,7 @@ export class Afterimages {
         .replace('#include <common>', '#include <common>\nvarying vec3 vGN;\nvarying vec3 vGV;')
         .replace(
           'vec4 diffuseColor = vec4( diffuse, opacity );',
-          `float fr = 1.0 - abs(dot(normalize(vGN), normalize(vGV)));
+          `float fr = clamp(1.0 - abs(dot(normalize(vGN), normalize(vGV))), 0.0, 1.0);
           float rim = pow(fr, 2.2);
           vec4 diffuseColor = vec4(diffuse * (0.18 + rim * 1.8), opacity);`,
         );

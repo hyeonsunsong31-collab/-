@@ -17,6 +17,7 @@ export class PlayerControls implements HeroControls {
   flyDir: THREE.Vector3 | null = null;
   vertical = 0;
   faceYaw: number | null = null;
+  viewYaw: number | null = null;
   sprint = false;
   aim: THREE.Vector3 | null = new THREE.Vector3();
   /** Sprint toggle from the mobile control (keyboard uses hold-Left-Shift). */
@@ -46,6 +47,7 @@ export class PlayerControls implements HeroControls {
       this.flyDir = this.flyV;
     }
     this.faceYaw = inp.shiftLock ? this.cam.forwardYaw : null;
+    this.viewYaw = this.cam.forwardYaw;
     // Ki aim without a target: the point the camera centre looks at, 60 m out.
     const cp = Math.cos(this.cam.pitch);
     this.aim!.copy(this.cam.camera.position).add(_v.set(-Math.sin(this.cam.yaw) * cp, Math.sin(this.cam.pitch) + 0.08, -Math.cos(this.cam.yaw) * cp).multiplyScalar(60));

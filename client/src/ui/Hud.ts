@@ -16,6 +16,10 @@ interface DmgNum {
   t: number;
   life: number;
   scale: number;
+  /** Screen offset (px): numbers landing on one spot in quick succession stack, new at the bottom. */
+  ox: number;
+  oy: number;
+  oyT: number;
 }
 
 const RANKS: [number, string, string][] = [
@@ -190,14 +194,27 @@ export class Hud {
     el.textContent = text;
     el.style.display = '';
     if (this.dmg.length > 42) this.recycle(this.dmg.shift()!);
+    // Rapid hits on one spot (combos, rush barrages) stack: the new number pops in at the hit and pushes the
+    // still-fresh ones up a line, alternating slightly left/right so the column stays legible.
+    let near = 0;
+    const lift = 26 * scale;
+    for (const d of this.dmg) {
+      if (d.t < 0.45 && d.pos.distanceToSquared(pos) < 1.5) {
+        d.oyT -= lift;
+        near++;
+      }
+    }
     this.dmg.push({
       el,
       pos: pos.clone(),
-      vx: (Math.random() - 0.5) * 70,
-      vy: -110 - Math.random() * 40,
+      vx: (Math.random() - 0.5) * 40,
+      vy: -110 - Math.random() * 30,
       t: 0,
       life: kind === 'taken' ? 0.9 : 1.05,
       scale,
+      ox: near ? (near % 2 === 1 ? 16 : -16) : 0,
+      oy: 0,
+      oyT: 0,
     });
   }
 
@@ -392,10 +409,11 @@ export class Hud {
         continue;
       }
       // Pop in, float up and drift, then fade.
+      d.oy += (d.oyT - d.oy) * Math.min(1, dt * 16);
       const k = d.t / d.life;
       const pop = d.t < 0.08 ? 1.7 - (d.t / 0.08) * 0.7 : 1;
-      const x = (s.x * 0.5 + 0.5) * w + d.vx * d.t;
-      const y = (-s.y * 0.5 + 0.5) * h + d.vy * d.t + 90 * d.t * d.t;
+      const x = (s.x * 0.5 + 0.5) * w + d.ox + d.vx * d.t;
+      const y = (-s.y * 0.5 + 0.5) * h + d.oy + d.vy * d.t + 90 * d.t * d.t;
       d.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -50%) scale(${(d.scale * pop).toFixed(3)})`;
       d.el.style.opacity = String(k > 0.7 ? 1 - (k - 0.7) / 0.3 : 1);
     }

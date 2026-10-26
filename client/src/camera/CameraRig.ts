@@ -210,6 +210,7 @@ export class CameraRig {
       pos.lerp(this.shotFrame.pos, this.blend);
       look.lerp(this.shotFrame.look, this.blend);
       fov = THREE.MathUtils.lerp(fov, this.shotFrame.fov, this.blend);
+      if (this.world) pos.y += this.clearSightline(pos, look);
     }
 
     this.fovCur += (fov - this.fovCur) * (1 - Math.exp(-dt * 8));
@@ -224,6 +225,9 @@ export class CameraRig {
     pos.x += n(1) * sh * 0.35;
     pos.y += n(2) * sh * 0.3;
     pos.z += n(3) * sh * 0.35;
+    // Final ground clearance for every source (scripted shots, shake, terrain raised by a fresh crater rim):
+    // the lens must never dip under the ground or a walkable top such as the arena stage.
+    if (this.world) pos.y = Math.max(pos.y, this.world.groundAt(pos.x, pos.z, pos.y + 0.5) + 0.3);
 
     this.camera.position.copy(pos);
     this.lastLook.copy(look);
@@ -235,6 +239,23 @@ export class CameraRig {
       _q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), (totalRoll * Math.PI) / 180);
       this.camera.quaternion.multiply(_q);
     }
+  }
+
+  /**
+   * How far to raise a scripted camera so the terrain does not hide its subject: raising the lens by h lifts a point
+   * a fraction t of the way to the subject by h·(1 − t), so each blocked sample asks for deficit / (1 − t).
+   */
+  private clearSightline(pos: THREE.Vector3, look: THREE.Vector3): number {
+    let raise = 0;
+    for (let i = 1; i < 10; i++) {
+      const t = i / 10;
+      const x = pos.x + (look.x - pos.x) * t;
+      const y = pos.y + (look.y - pos.y) * t;
+      const z = pos.z + (look.z - pos.z) * t;
+      const deficit = this.world!.terrainHeight(x, z) + 0.15 - y;
+      if (deficit > 0) raise = Math.max(raise, deficit / (1 - t));
+    }
+    return Math.min(raise, 4);
   }
 }
 

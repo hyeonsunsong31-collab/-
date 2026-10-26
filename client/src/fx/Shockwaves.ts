@@ -36,7 +36,9 @@ const RING_FRAG = /* glsl */ `
     float ang = atan(p.y, p.x);
     float n = vnoise(vec2(ang * 6.0 + uSeed, uK * 3.0)) * 0.6 + vnoise(vec2(ang * 19.0 - uSeed, uK * 5.0)) * 0.4;
     float w = uWidth * (0.7 + n * 0.6);
-    float band = exp(-pow((r - 0.86) / w, 2.0));
+    // Squares are written out: pow() with a negative base is undefined in GLSL (NaN on some GPUs).
+    float bd = (r - 0.86) / w;
+    float band = exp(-bd * bd);
     // Inner smear trailing behind the wavefront.
     float inner = smoothstep(0.86, 0.3, r) * smoothstep(0.0, 0.86, r) * 0.25 * (1.0 - uK);
     float a = (band + inner) * uAlpha * (1.0 - uK) * (0.6 + n * 0.6);
@@ -71,7 +73,7 @@ const SHELL_FRAG = /* glsl */ `
                mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x), mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z);
   }
   void main() {
-    float fr = 1.0 - abs(dot(normalize(vN), normalize(vV)));
+    float fr = clamp(1.0 - abs(dot(normalize(vN), normalize(vV))), 0.0, 1.0);
     float n = vnoise(vP * 3.0 + uSeed + uK * 2.0);
     float a = (pow(fr, 2.5) * 1.2 + 0.08) * uAlpha * (1.0 - uK) * (0.7 + n * 0.6);
     if (a < 0.002) discard;
